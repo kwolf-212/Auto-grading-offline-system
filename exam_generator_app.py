@@ -39,6 +39,17 @@ PAGE_SIZES = {
     "Letter Landscape": landscape(letter),
 }
 
+# ---------------- CONSTANTS ----------------
+# 페이지 여백 상수 (mm 단위)
+MARGIN_TOP_COMPACT = 30      # 상단 여백
+MARGIN_BOTTOM_COMPACT = 30   # 하단 여백  
+MARGIN_LEFT_COMPACT = 20     # 좌측 여백
+MARGIN_RIGHT_COMPACT = 20    # 우측 여백
+
+# Two Column 설정
+COLUMN_GAP_COMPACT = 15      # 컬럼 간 간격
+PAGE_BOTTOM_MARGIN = 0      # 페이지 하단 여유 공간
+
 # ---------------- QR ---------------- 
 def generate_qr(data, filename="exam_qr.png"):
     qr = qrcode.QRCode(
@@ -135,11 +146,16 @@ class ExamSettingsDialog(QDialog):
         self.essay_lines.setValue(4)
         page_layout.addRow("Essay Lines:", self.essay_lines)
 
+        # 여백 프리셋 선택 추가
+        preset_layout = QHBoxLayout()
+        preset_layout.addWidget(QLabel("Margin Preset:"))
         self.margin_preset = QComboBox()
-        self.margin_preset.addItems(["Normal", "Compact", "Wide", "Print Optimized"])
+        self.margin_preset.addItems(["Compact", "Normal", "Wide", "Print Optimized"])
         self.margin_preset.setCurrentText("Print Optimized")
         self.margin_preset.currentTextChanged.connect(self.on_margin_preset_changed)
-        page_layout.addRow("Margin Preset:", self.margin_preset)
+        preset_layout.addWidget(self.margin_preset)
+        preset_layout.addStretch()
+        page_layout.addRow("", preset_layout)
 
         tab_widget.addTab(page_tab, "📄 Page Setup")
         
@@ -212,15 +228,16 @@ class ExamSettingsDialog(QDialog):
         self.setLayout(layout)
     
     def on_margin_preset_changed(self, preset):
-        if preset == "Normal":
-            self.margin_spin.setValue(50)
-        elif preset == "Compact":
-            self.margin_spin.setValue(35)
-        elif preset == "Wide":
-            self.margin_spin.setValue(65)
-        elif preset == "Print Optimized":
+        """여백 프리셋 변경 시"""
+        if preset == "Compact":
+            self.margin_spin.setValue(30)
+        elif preset == "Normal":
             self.margin_spin.setValue(45)
-            
+        elif preset == "Wide":
+            self.margin_spin.setValue(60)
+        elif preset == "Print Optimized":
+            self.margin_spin.setValue(40)
+                        
     def get_settings(self):
         return {
             'exam_title': self.exam_title_input.text(),
@@ -825,7 +842,7 @@ class GeneratorApp(QMainWindow):
             'exam_date': datetime.now().strftime("%B %d, %Y"),
             'exam_instruction': '',
             'page_size': 'A4',
-            'layout_style': 'Standard (Single Column)',
+            'layout_style': 'Two Column',
             'margin': 50,
             'line_spacing': 1.5,
             'font_size': 11,
@@ -1121,8 +1138,9 @@ class GeneratorApp(QMainWindow):
         self.temp_pdf_path = os.path.join(temp_dir, f"exam_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
         
         try:
-            self._generate_pdf_to_file(self.temp_pdf_path, is_preview=True)
-            # 잠시 대기 후 미리보기 로드 (파일 쓰기 완료 보장)
+            # is_preview=False로 변경하여 저장용 PDF와 완전히 동일하게 생성
+            self._generate_pdf_to_file(self.temp_pdf_path, is_preview=False)
+            # 잠시 대기 후 미리보기 로드
             QTimer.singleShot(200, lambda: self.pdf_preview.load_pdf(self.temp_pdf_path))
             self.pdf_preview.status_label.setText(f"✅ Preview updated | {len(self.questions)} questions")
         except Exception as e:
@@ -1131,48 +1149,35 @@ class GeneratorApp(QMainWindow):
             traceback.print_exc()
 
     def _draw_student_info(self, c, width, height, margin_left, margin_right, current_y, available_width):
-        """Draw student information section on PDF"""
+        """학생 정보 섹션 - 한 줄로 간략하게 배치"""
         if not self.settings.get('include_student_info', True):
             return current_y
         
-        line_height = 18
-        box_height = 130
+        line_height = 20
         
         c.setStrokeColor(black)
-        c.setLineWidth(1)
-        c.rect(margin_left, current_y - box_height, available_width, box_height)
+        c.setLineWidth(0.5)
+        c.rect(margin_left, current_y - 35, available_width, 35)
         
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(margin_left + 10, current_y - 15, "STUDENT INFORMATION")
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin_left + 8, current_y - 12, "STUDENT INFO")
         
-        c.setFont("Helvetica", 10)
-        info_y = current_y - 35
+        c.setFont("Helvetica", 9)
         
+        # 필드 값 가져오기
         name = self.settings.get('student_name', '') or "_________________________"
         student_id = self.settings.get('student_id', '') or "_________________________"
         dept = self.settings.get('department', '') or "_________________________"
-        instructor = self.settings.get('instructor', '') or "_________________________"
-        student_date = self.settings.get('student_date', '') or datetime.now().strftime("%Y-%m-%d")
         
-        # 좌우 2열로 배치
-        col_width = (available_width - 30) // 2
+        # 한 줄에 모두 배치 (컬럼 간격 균등하게)
+        col_width = (available_width - 40) // 3
         
-        c.drawString(margin_left + 15, info_y, f"Name: {name}")
-        c.drawString(margin_left + 15 + col_width, info_y, f"Student ID: {student_id}")
-        info_y -= line_height
+        c.drawString(margin_left + 12, current_y - 28, f"Name: {name}")
+        c.drawString(margin_left + 12 + col_width, current_y - 28, f"ID: {student_id}")
+        c.drawString(margin_left + 12 + col_width * 2, current_y - 28, f"Dept: {dept}")
         
-        c.drawString(margin_left + 15, info_y, f"Department: {dept}")
-        c.drawString(margin_left + 15 + col_width, info_y, f"Instructor: {instructor}")
-        info_y -= line_height
-        
-        c.drawString(margin_left + 15, info_y, f"Date: {student_date}")
-        
-        additional = self.settings.get('additional_info', '')
-        if additional:
-            info_y -= line_height
-            c.drawString(margin_left + 15, info_y, f"Note: {additional[:50]}")
-        
-        return current_y - box_height - 15
+        return current_y - 45  # 학생정보 박스 높이만큼 이동
+
 
     def _wrap_text(self, text, max_width, font_size=11):
         """텍스트를 주어진 너비에 맞게 자동 줄바꿈"""
@@ -1208,7 +1213,7 @@ class GeneratorApp(QMainWindow):
                             line_height, font_size, available_width, start_y):
         """표준 레이아웃으로 질문 표시 (Two column과 일관성 유지)"""
         current_y = start_y
-        page_bottom_margin = 70
+        page_bottom_margin = 0
         
         for q in questions:
             # 필요 높이 계산
@@ -1372,104 +1377,144 @@ class GeneratorApp(QMainWindow):
         
         return current_y
 
-    def _draw_question_two_column(self, c, questions, margin_left, margin_right, width, height,
-                                line_height, font_size, available_width, start_y):
-        """Two column layout으로 질문 표시 (자동 줄바꿈 및 페이지 분할 적용)"""
-        
-        col_gap = 20  # 두 컬럼 사이 간격
+    def _draw_question_two_column_v2(self, c, questions, margin_left, margin_right, width, height,
+                                  line_height, font_size, available_width, start_y):
+        """
+        개선된 Two column layout - 문제 간 간격을 충분히 줌
+        """
+        col_gap = 15
         col_width = (available_width - col_gap) // 2
         
         left_col_x = margin_left
         right_col_x = margin_left + col_width + col_gap
         
-        # 각 컬럼의 현재 Y 위치
-        left_y = start_y
-        right_y = start_y
+        # 페이지 하단 마진
+        page_bottom_margin = 25
         
-        page_bottom_margin = 70
+        current_y = start_y
+        q_index = 0
+        total_questions = len(questions)
         
-        # 질문을 왼쪽/오른쪽 컬럼에 번갈아 배치
-        for i, q in enumerate(questions):
-            # 현재 컬럼 결정
-            if i % 2 == 0:
-                current_x = left_col_x
-                current_y = left_y
-                is_left = True
-            else:
-                current_x = right_col_x
-                current_y = right_y
-                is_left = False
-            
-            # 질문 높이 예측
-            needed_height = self._estimate_question_height_two_col(q, line_height, font_size, col_width)
-            
-            # 현재 컬럼에 공간이 충분한지 확인
-            if current_y - needed_height < page_bottom_margin:
-                # 공간 부족 - 새 페이지 생성
+        while q_index < total_questions:
+            # 새 페이지 시작
+            if q_index > 0:
                 c.showPage()
-                # 새 페이지에서 컬럼 위치 초기화
-                left_y = height - 80
-                right_y = height - 80
+                current_y = height - 35
+            
+            # 왼쪽 컬럼 채우기
+            left_y = current_y
+            left_q_indices = []
+            
+            temp_index = q_index
+            while temp_index < total_questions:
+                q = questions[temp_index]
+                # 문제 높이에 추가 간격 10pt 포함
+                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
                 
-                if is_left:
-                    current_y = left_y
-                    left_y = current_y
+                if left_y - q_height > page_bottom_margin:
+                    left_q_indices.append(temp_index)
+                    left_y -= q_height
+                    temp_index += 1
                 else:
-                    current_y = right_y
-                    right_y = current_y
+                    break
+            
+            # 오른쪽 컬럼 채우기
+            right_q_indices = []
+            right_y = current_y
+            
+            temp_index2 = temp_index
+            while temp_index2 < total_questions:
+                q = questions[temp_index2]
+                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
                 
-                # 폰트 재설정
-                c.setFont("Helvetica", font_size)
+                if right_y - q_height > page_bottom_margin:
+                    right_q_indices.append(temp_index2)
+                    right_y -= q_height
+                    temp_index2 += 1
+                else:
+                    break
             
-            # 질문 그리기
-            new_y = self._draw_single_question_two_col(
-                c, q, current_x, current_y, line_height, font_size, col_width, i+1
-            )
+            # 문제 그리기 (왼쪽 컬럼)
+            if left_q_indices:
+                y_pos = current_y
+                for idx in left_q_indices:
+                    q = questions[idx]
+                    y_pos = self._draw_single_question_two_col_v3(
+                        c, q, left_col_x, y_pos, line_height, font_size, col_width, idx + 1
+                    )
+                    y_pos -= 25  # 문제 간 간격을 25로 증가 (구분선을 위한 공간)
+                    # 구분선 그리기 (마지막 문제 제외)
+                    if idx != left_q_indices[-1]:
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.setLineWidth(0.5)
+                        c.line(left_col_x, y_pos + 12, left_col_x + col_width, y_pos + 12)
+                        c.setStrokeColor(black)
             
-            # 해당 컬럼의 Y 위치 업데이트
-            if is_left:
-                left_y = new_y - 15  # 질문 간 간격
+            # 문제 그리기 (오른쪽 컬럼)
+            if right_q_indices:
+                y_pos = current_y
+                for idx in right_q_indices:
+                    q = questions[idx]
+                    y_pos = self._draw_single_question_two_col_v3(
+                        c, q, right_col_x, y_pos, line_height, font_size, col_width, idx + 1
+                    )
+                    y_pos -= 25  # 문제 간 간격을 25로 증가
+                    # 구분선 그리기 (마지막 문제 제외)
+                    if idx != right_q_indices[-1]:
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.setLineWidth(0.5)
+                        c.line(right_col_x, y_pos + 12, right_col_x + col_width, y_pos + 12)
+                        c.setStrokeColor(black)
+            
+            # 다음 페이지로 이동할 인덱스 결정
+            if right_q_indices:
+                q_index = right_q_indices[-1] + 1
+            elif left_q_indices:
+                q_index = left_q_indices[-1] + 1
             else:
-                right_y = new_y - 15
-        
-        return min(left_y, right_y) if questions else start_y
+                q_index = temp_index if temp_index > q_index else q_index + 1
 
-    def _estimate_question_height_two_col(self, q, line_height, font_size, col_width):
-        """Two column용 질문 높이 예측"""
-        total_height = 0
+    def _estimate_question_height_two_col_v2(self, q, line_height, font_size, col_width):
+        """개선된 Two column용 질문 높이 예측 (더 정확하게)"""
+        total_height = 20  # 기본 여백
         
-        # 질문 텍스트 높이 (컬럼 너비에 맞게)
+        # 질문 텍스트 높이
         question_text = q['text']
-        approx_chars_per_line = max(10, int(col_width / (font_size * 0.6)))
-        question_lines = max(1, (len(question_text) // approx_chars_per_line) + 1)
-        total_height += question_lines * line_height + 10
+        # 한 줄당 평균 문자 수 (폰트 크기 11pt 기준)
+        chars_per_line = max(10, int(col_width / (font_size * 0.55)))
+        question_lines = max(1, (len(question_text) // chars_per_line) + 1)
+        total_height += question_lines * (line_height + 2)
         
-        # 문제 유형별 추가 높이 (컬럼에 맞게 축소)
+        # 문제 유형별 추가 높이
         if q["type"] == 0:  # Multiple Choice
-            choices_count = min(len(q.get("choices", [])), 4)  # 컬럼에서는 최대 4개
-            total_height += choices_count * (line_height - 4) + 15
+            choices_count = min(len(q.get("choices", [])), 5)
+            total_height += choices_count * (line_height - 2) + 10
         elif q["type"] == 1:  # True/False
-            total_height += line_height
+            total_height += line_height - 2
         elif q["type"] == 2:  # Fill in Blank
-            total_height += line_height
+            total_height += line_height - 2
         elif q["type"] == 3:  # Short Answer
-            total_height += line_height
+            total_height += line_height - 2
         elif q["type"] == 4:  # Essay
-            essay_lines = min(3, self.settings.get('essay_lines', 4))  # 컬럼에서는 최대 3줄
-            total_height += essay_lines * line_height
+            essay_lines = min(3, self.settings.get('essay_lines', 4))
+            total_height += essay_lines * (line_height - 2) + 5
         elif q["type"] == 5:  # Matching
-            pairs_count = min(len(q.get("matching_pairs", [])), 3)
-            total_height += max(2, pairs_count) * (line_height - 4)
-        elif q["type"] in [6, 7, 8]:
-            total_height += line_height * 2
+            pairs_count = min(len(q.get("matching_pairs", [])), 4)
+            total_height += max(2, pairs_count) * (line_height - 2) + 10
+        elif q["type"] == 6:  # Ordering
+            total_height += line_height
+        elif q["type"] == 7:  # Code
+            total_height += 45
+        elif q["type"] == 8:  # Calculation
+            total_height += (line_height - 2) * 2 + 10
         
-        return total_height + 25
+        return total_height
 
-    def _draw_single_question_two_col(self, c, q, x, y, line_height, font_size, col_width, q_num):
-        """Two column에서 단일 질문 그리기"""
+    def _draw_single_question_two_col_v3(self, c, q, x, y, line_height, font_size, col_width, q_num):
+        """개선된 Two column용 단일 문제 그리기 (문제 간 간격 충분히 줌)"""
         current_y = y
         
-        # 번호 스타일 적용
+        # 번호 스타일
         numbering = self.settings.get('numbering_style', '1, 2, 3...')
         if numbering == "1), 2), 3)...":
             q_prefix = f"{q_num})"
@@ -1478,84 +1523,103 @@ class GeneratorApp(QMainWindow):
         elif numbering == "A, B, C...":
             q_prefix = chr(64 + min(q_num, 26))
         else:
-            q_prefix = f"Q{q_num}"
+            q_prefix = f"{q_num}."
         
-        # 질문 텍스트 자동 줄바꿈 (컬럼 너비에 맞게)
-        points_text = f" ({q['score']} pts)" if self.settings.get('show_points', True) else ""
-        full_question_text = f"{q_prefix}. {q['text']}{points_text}"
+        # 점수 표시
+        points_text = f" [{q['score']} pts]" if self.settings.get('show_points', True) else ""
+        full_text = f"{q_prefix} {q['text']}{points_text}"
         
-        c.setFont("Helvetica-Bold", font_size - 1)  # 컬럼에서는 폰트 약간 작게
+        c.setFont("Helvetica-Bold", font_size - 1)
         
         # 텍스트 줄바꿈
-        question_lines = self._wrap_text(full_question_text, col_width - 10, font_size - 1)
-        for line in question_lines:
-            # 텍스트가 너무 길면 자르기
-            if len(line) > 60:
-                line = line[:57] + "..."
-            c.drawString(x, current_y, line)
+        text_lines = self._wrap_text(full_text, col_width - 10, font_size - 1)
+        for idx, line in enumerate(text_lines):
+            if idx == 0:
+                c.drawString(x, current_y, line)
+            else:
+                indent = " " * (len(str(q_prefix)) + 1)
+                c.drawString(x, current_y, f"{indent}{line}")
             current_y -= line_height
         
-        current_y -= 5
+        current_y -= 6
         c.setFont("Helvetica", font_size - 2)
         
-        # 문제 유형별 내용 표시 (컬럼 버전)
-        current_y = self._draw_question_content_two_col(c, q, x, current_y, line_height, font_size, col_width)
+        # 문제 내용
+        current_y = self._draw_question_content_two_col_v3(c, q, x, current_y, line_height, font_size, col_width)
         
         return current_y
 
-    def _draw_question_content_two_col(self, c, q, x, current_y, line_height, font_size, col_width):
-        """Two column용 문제 내용 표시"""
+    def _draw_question_content_two_col_v3(self, c, q, x, current_y, line_height, font_size, col_width):
+        """문제 내용 표시 (간격 최적화)"""
+        bottom_margin = 8  # 내용 하단 여백 추가
         
         if q["type"] == 0:  # Multiple Choice
-            for i, choice in enumerate(q.get("choices", [])[:4], 1):  # 최대 4개만 표시
+            c.setFont("Helvetica", font_size - 2)
+            for i, choice in enumerate(q.get("choices", [])[:5], 1):
                 choice_display = choice[:35] + "..." if len(choice) > 35 else choice
-                c.drawString(x + 5, current_y, f"   {chr(96+i)}. {choice_display}")
-                current_y -= line_height - 4
+                c.drawString(x + 8, current_y, f"   {chr(96+i)}. {choice_display}")
+                current_y -= line_height - 2
             if self.settings.get('show_answer_lines', True):
-                current_y -= line_height - 4
-                c.drawString(x, current_y, f"Ans: ___")
+                current_y -= line_height - 2
+                c.drawString(x + 8, current_y, f"   Answer: _____")
+            current_y -= bottom_margin
         
         elif q["type"] == 1:  # True/False
-            c.drawString(x + 5, current_y, "T/F")
+            c.drawString(x + 8, current_y, "   ( ) True   ( ) False")
             if self.settings.get('show_answer_lines', True):
-                current_y -= line_height - 4
-                c.drawString(x, current_y, "Ans: ___")
+                current_y -= line_height - 2
+                c.drawString(x + 8, current_y, f"   Answer: _____")
+            current_y -= bottom_margin
         
         elif q["type"] == 2:  # Fill in Blank
-            c.drawString(x + 5, current_y, "______")
+            blank_count = min(len(q.get("blanks", [])), 4) or 3
+            blanks = " ______ " * blank_count
+            c.drawString(x + 8, current_y, blanks)
+            current_y -= bottom_margin
         
         elif q["type"] == 3:  # Short Answer
             if self.settings.get('show_answer_lines', True):
-                c.drawString(x + 5, current_y, "Ans: _________")
+                c.drawString(x + 8, current_y, "   Answer: _______________")
+            current_y -= bottom_margin
         
         elif q["type"] == 4:  # Essay
-            c.drawString(x + 5, current_y, "[Answer]")
+            c.drawString(x + 8, current_y, "   [Write your answer below]")
             essay_lines = min(3, self.settings.get('essay_lines', 4))
             for i in range(essay_lines):
                 current_y -= line_height
-                c.line(x + 5, current_y, x + col_width - 15, current_y)
+                c.line(x + 8, current_y, x + col_width - 15, current_y)
+            current_y -= bottom_margin
         
         elif q["type"] == 5:  # Matching
-            c.drawString(x + 5, current_y, "Match:")
+            c.drawString(x + 8, current_y, "   Match:")
             current_y -= line_height
-            pairs = q.get("matching_pairs", [])[:3]
+            pairs = q.get("matching_pairs", [])[:4]
             for left, right in pairs:
                 left_display = left[:20] + "..." if len(left) > 20 else left
-                c.drawString(x + 10, current_y, f"{left_display} ↔ ___")
-                current_y -= line_height - 4
+                c.drawString(x + 14, current_y, f"   {left_display} → _____")
+                current_y -= line_height - 2
+            current_y -= bottom_margin
         
         elif q["type"] == 6:  # Ordering
-            c.drawString(x + 5, current_y, "Order: ___ , ___ , ___")
+            c.drawString(x + 8, current_y, "   Order: ___ , ___ , ___ , ___")
+            current_y -= bottom_margin
         
         elif q["type"] == 7:  # Code
-            c.drawString(x + 5, current_y, "Code:")
+            c.drawString(x + 8, current_y, "   Code:")
             current_y -= line_height
-            c.rect(x + 5, current_y - 30, col_width - 20, 30)
+            c.rect(x + 8, current_y - 30, col_width - 20, 30)
+            current_y -= bottom_margin + 30
         
         elif q["type"] == 8:  # Calculation
-            c.drawString(x + 5, current_y, "Work:")
+            formula = q.get('formula', '')
+            if formula:
+                formula_display = formula[:25] + "..." if len(formula) > 25 else formula
+                c.drawString(x + 8, current_y, f"   Formula: {formula_display}")
+                current_y -= line_height
+            c.drawString(x + 8, current_y, "   Show your work:")
             current_y -= line_height
-            c.line(x + 5, current_y, x + col_width - 15, current_y)
+            c.line(x + 8, current_y, x + col_width - 15, current_y)
+            current_y -= bottom_margin
         
         return current_y
 
@@ -1564,55 +1628,67 @@ class GeneratorApp(QMainWindow):
         exam_date = self.settings.get('exam_date', '') or datetime.now().strftime("%B %d, %Y")
         
         page_size = PAGE_SIZES.get(self.settings.get('page_size', 'A4'), A4)
-        margin_mm = self.settings.get('margin', 50)
-        
-        # 여백 조정: 상단(margin_mm), 하단(margin_mm + 20), 좌우(margin_mm - 10)
-        margin = margin_mm * mm
-        margin_top = margin  # 상단 여백
-        margin_bottom = (margin_mm + 25) * mm  # 하단 여백 증가 (인쇄 여유분)
-        margin_left = (margin_mm - 10) * mm  # 좌측 여백 감소
-        margin_right = (margin_mm - 10) * mm  # 우측 여백 감소
-        
-        line_height = int(self.settings.get('line_spacing', 1.5) * self.settings.get('font_size', 11))
-        layout_style = self.settings.get('layout_style', 'Standard (Single Column)')
-        font_size = self.settings.get('font_size', 11)
-        title_font_size = self.settings.get('title_font_size', 18)
         
         c = canvas.Canvas(file_path, pagesize=page_size)
         width, height = page_size
+
+        margin_top = 25 * mm
+        margin_bottom = 15 * mm
+        margin_left = 20 * mm
+        margin_right = 20 * mm
         
-        # 사용 가능한 영역 계산
         available_width = width - margin_left - margin_right
-        available_height = height - margin_top - margin_bottom
         
-        # Header section
+        line_height = int(self.settings.get('line_spacing', 1.5) * self.settings.get('font_size', 11))
+        layout_style = self.settings.get('layout_style', 'Two Column')
+        font_size = self.settings.get('font_size', 11)
+        title_font_size = self.settings.get('title_font_size', 18)
+        
+        # ===== 헤더 영역 =====
+        current_y = height - margin_top
+        
+        # 시험 제목
         c.setFont("Helvetica-Bold", title_font_size)
-        c.drawCentredString(width/2, height - margin_top + 15, exam_title)
+        c.drawCentredString(width/2, current_y, exam_title)
+        current_y -= 22
+        
+        # 날짜 정보
         c.setFont("Helvetica", 10)
-        c.drawString(margin_left, height - margin_top - 5, f"Date: {exam_date}")
+        c.drawString(margin_left, current_y, f"Date: {exam_date}")
+        
+        # 총점 정보
         total_points = sum(q.get('score', 0) for q in self.questions)
-        c.drawRightString(width - margin_right, height - margin_top - 5, f"Total: {total_points} points")
         
-        # Instructions
+        if self.settings.get('show_qr', True):
+            c.drawRightString(width - margin_right - 55, current_y, f"Total: {total_points} pts")
+        else:
+            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
+        
+        current_y -= 18
+        
+        # 시험지 설명
         instruction = self.settings.get('exam_instruction', '')
-        current_y = height - margin_top - 35
-        
         if instruction:
-            # 자동 줄바꿈 적용
-            instruction_lines = self._wrap_text(instruction, available_width - 30, 10)
             c.setFont("Helvetica-Oblique", 9)
+            instruction_lines = self._wrap_text(instruction, available_width - 20, 9)
             for line in instruction_lines:
-                c.drawString(margin_left, current_y, f"📌 {line}")
+                c.drawString(margin_left, current_y, f"※ {line}")
                 current_y -= line_height - 4
-            current_y -= 10
+            current_y -= 8
         
-        # Student info section
-        if not is_preview:
-            current_y = self._draw_student_info(c, width, height, margin_left, margin_right, current_y, available_width)
-            current_y -= 25
+        # 구분선
+        c.line(margin_left, current_y, width - margin_right, current_y)
+        current_y -= 15
         
-        # QR Code
-        if not is_preview and self.settings.get('show_qr', True):
+        # ===== 학생 정보 영역 =====
+        current_y = self._draw_student_info(c, width, height, margin_left, margin_right, 
+                                            current_y, available_width)
+        
+        # 학생정보와 문제영역 사이 간격을 25로 증가
+        current_y -= 25
+        
+        # ===== QR 코드 =====
+        if self.settings.get('show_qr', True):
             qr_data = json.dumps({
                 "exam": exam_title,
                 "date": exam_date,
@@ -1620,23 +1696,21 @@ class GeneratorApp(QMainWindow):
                 "total_score": total_points
             })
             qr_path = generate_qr(qr_data, f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-            c.drawImage(qr_path, width - 70, height - margin_top - 60, width=50, height=50)
+            c.drawImage(qr_path, width - margin_right - 45, height - margin_top - 35, width=35, height=35)
             if os.path.exists(qr_path):
                 os.remove(qr_path)
         
-        # 구분선
-        c.line(margin_left, current_y, width - margin_right, current_y)
-        current_y -= 25
-        
-        # 질문 표시
+        # ===== 질문 영역 =====
         if layout_style == "Two Column":
-            self._draw_question_two_column(c, self.questions, margin_left, margin_right, width, height, 
-                                            line_height, font_size, available_width, current_y)
+            self._draw_question_two_column_v2(c, self.questions, margin_left, margin_right, 
+                                            width, height, line_height, font_size, 
+                                            available_width, current_y)
         else:
             self._draw_question_standard(c, self.questions, margin_left, margin_right, width, height,
-                                        line_height, font_size, available_width, current_y)
+                                        line_height, font_size, available_width, current_y, 40)
         
         c.save()
+
 
     def on_type_changed(self, index):
         for i in reversed(range(self.dynamic_layout.count())):
