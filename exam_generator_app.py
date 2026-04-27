@@ -6,7 +6,7 @@ import qrcode
 from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QFont, QColor, QPixmap, QIcon, QPainter, QPen
-from PyQt5.QtCore import Qt, QTimer, QRect, QPoint
+from PyQt5.QtCore import Qt, QTimer, QRect, QPoint, QSize
 from reportlab.lib.pagesizes import A4, letter, A5, B5, legal, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
@@ -317,28 +317,45 @@ class SettingsSummaryWidget(QWidget):
         self.settings_label = QLabel()
         self.settings_label.setStyleSheet("""
             QLabel {
-                background-color: #f0f2f5;
-                padding: 8px 12px;
+                background-color: #252526;
+                color: #e0e0e0;
+                padding: 10px 14px;
                 border-radius: 8px;
                 font-size: 12px;
+                border: 1px solid #3d3d3d;
             }
         """)
         
-        # Edit 버튼
-        self.edit_btn = QPushButton("✏️ Edit Settings")
+        # Edit 버튼 - Preview 도구 모음 버튼과 동일한 스타일 적용
+        self.edit_btn = QPushButton("⚙️")
+        self.edit_btn.setToolTip("시험 설정 편집")
         self.edit_btn.setStyleSheet("""
             QPushButton {
-                background-color: #17a2b8;
-                color: white;
-                border-radius: 8px;
-                padding: 6px 12px;
+                font-size: 18px;
                 font-weight: bold;
-                font-size: 11px;
+                background-color: #3c3c3c;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 44px;
+                max-width: 44px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
             }
-            QPushButton:hover { background-color: #138496; }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #007acc;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                color: #666;
+                background-color: #2a2a2a;
+            }
         """)
         self.edit_btn.setCursor(Qt.PointingHandCursor)
-        self.edit_btn.setFixedWidth(100)
         
         layout.addWidget(self.settings_label, 1)
         layout.addWidget(self.edit_btn)
@@ -444,113 +461,273 @@ class PDFPreviewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
         
-        # 상단 툴바 (더 많은 기능 추가)
-        toolbar_layout = QHBoxLayout()
+        # 상단 툴바
+        toolbar_widget = QWidget()
+        toolbar_widget.setStyleSheet("""
+            QWidget {
+                background-color: #2d2d2d;
+                border-radius: 8px;
+                margin: 2px;
+            }
+        """)
+        toolbar_layout = QHBoxLayout(toolbar_widget)
+        toolbar_layout.setContentsMargins(10, 5, 10, 5)
         toolbar_layout.setSpacing(8)
         
-        # 줌 컨트롤
-        self.zoom_label = QLabel("Zoom:")
-        self.zoom_label.setStyleSheet("font-size: 11px;")
+        # 버튼 공통 스타일 (아이콘 버튼용)
+        icon_button_style = """
+            QPushButton {
+                font-size: 18px;
+                font-weight: bold;
+                background-color: #3c3c3c;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 44px;
+                max-width: 44px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #007acc;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                color: #666;
+                background-color: #2a2a2a;
+            }
+        """
         
-        self.zoom_slider = QSlider(Qt.Horizontal)
-        self.zoom_slider.setRange(30, 300)
-        self.zoom_slider.setValue(100)
-        self.zoom_slider.setTickPosition(QSlider.TicksBelow)
-        self.zoom_slider.setTickInterval(25)
-        self.zoom_slider.setFixedWidth(150)
-        self.zoom_slider.valueChanged.connect(self.on_zoom_slider_changed)
+        # 작은 버튼 스타일 (숫자 버튼용)
+        small_button_style = """
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #3c3c3c;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #007acc;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                color: #666;
+                background-color: #2a2a2a;
+            }
+        """
+        
+        # 줌 표시
+        # self.zoom_label = QLabel("🔍")
+        # self.zoom_label.setStyleSheet("font-size: 16px; color: #ffffff;")
         
         self.zoom_value = QLabel("100%")
-        self.zoom_value.setFixedWidth(45)
-        self.zoom_value.setStyleSheet("font-size: 11px; font-weight: bold;")
+        self.zoom_value.setFixedWidth(55)
+        self.zoom_value.setAlignment(Qt.AlignCenter)
+        self.zoom_value.setStyleSheet("""
+            font-size: 13px;
+            font-weight: bold;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 5px;
+        """)
         
         # 줌 버튼
-        self.zoom_in_btn = QPushButton("🔍+")
-        self.zoom_in_btn.setFixedSize(35, 28)
-        self.zoom_in_btn.setToolTip("Zoom In (Ctrl+Scroll Up)")
-        self.zoom_in_btn.clicked.connect(self.zoom_in)
-        
-        self.zoom_out_btn = QPushButton("🔍-")
-        self.zoom_out_btn.setFixedSize(35, 28)
-        self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+Scroll Down)")
+        self.zoom_out_btn = QPushButton("🔍−")
+        self.zoom_out_btn.setToolTip("축소 (Ctrl+Scroll Down)")
+        self.zoom_out_btn.setStyleSheet(small_button_style)
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         
+        self.zoom_in_btn = QPushButton("🔍+")
+        self.zoom_in_btn.setToolTip("확대 (Ctrl+Scroll Up)")
+        self.zoom_in_btn.setStyleSheet(small_button_style)
+        self.zoom_in_btn.clicked.connect(self.zoom_in)
+        
         self.reset_zoom_btn = QPushButton("↺")
-        self.reset_zoom_btn.setFixedSize(35, 28)
-        self.reset_zoom_btn.setToolTip("Reset Zoom (100%)")
+        self.reset_zoom_btn.setToolTip("원래 크기로 (100%)")
+        self.reset_zoom_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: bold;
+                background-color: #3c3c3c;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 44px;
+                max-width: 44px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #007acc;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+        """)
         self.reset_zoom_btn.clicked.connect(self.reset_zoom)
         
-        # Fit 버튼
-        self.fit_width_btn = QPushButton("📏 Fit Width")
-        self.fit_width_btn.setFixedSize(85, 28)
-        self.fit_width_btn.setToolTip("Fit to Width (Ctrl+W)")
-        self.fit_width_btn.clicked.connect(self.fit_to_width)
-        
-        self.fit_height_btn = QPushButton("📐 Fit Height")
-        self.fit_height_btn.setFixedSize(85, 28)
-        self.fit_height_btn.setToolTip("Fit to Height (Ctrl+H)")
-        self.fit_height_btn.clicked.connect(self.fit_to_height)
-        
-        self.fit_page_btn = QPushButton("📄 Fit Page")
-        self.fit_page_btn.setFixedSize(85, 28)
-        self.fit_page_btn.setToolTip("Fit Whole Page (Ctrl+F)")
-        self.fit_page_btn.clicked.connect(self.fit_to_page)
-        
-        # 구분선 (레이아웃용)
+        # 구분선
         separator1 = QFrame()
         separator1.setFrameShape(QFrame.VLine)
         separator1.setFrameShadow(QFrame.Sunken)
-        separator1.setFixedWidth(2)
+        separator1.setFixedSize(2, 30)
+        separator1.setStyleSheet("background-color: #555;")
         
+        # Fit 버튼 (아이콘으로 변경)
+        self.fit_width_btn = QPushButton("⬌")
+        self.fit_width_btn.setToolTip("너비에 맞추기 (Ctrl+W)")
+        self.fit_width_btn.setStyleSheet(icon_button_style)
+        self.fit_width_btn.clicked.connect(self.fit_to_width)
+        
+        self.fit_height_btn = QPushButton("⬍")
+        self.fit_height_btn.setToolTip("높이에 맞추기 (Ctrl+H)")
+        self.fit_height_btn.setStyleSheet(icon_button_style)
+        self.fit_height_btn.clicked.connect(self.fit_to_height)
+        
+        self.fit_page_btn = QPushButton("⊞")
+        self.fit_page_btn.setToolTip("페이지 전체 맞추기 (Ctrl+F)")
+        self.fit_page_btn.setStyleSheet(icon_button_style)
+        self.fit_page_btn.clicked.connect(self.fit_to_page)
+        
+        # 구분선
         separator2 = QFrame()
         separator2.setFrameShape(QFrame.VLine)
         separator2.setFrameShadow(QFrame.Sunken)
-        separator2.setFixedWidth(2)
+        separator2.setFixedSize(2, 30)
+        separator2.setStyleSheet("background-color: #555;")
         
-        # 페이지 네비게이션
+        # 페이지 네비게이션 버튼 (아이콘으로 변경)
         self.prev_btn = QPushButton("◀")
-        self.prev_btn.setFixedSize(30, 28)
-        self.prev_btn.setToolTip("Previous Page (←)")
+        self.prev_btn.setToolTip("이전 페이지 (←)")
+        self.prev_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: bold;
+                background-color: #3c3c3c;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 50px;
+                max-width: 50px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #007acc;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                color: #666;
+                background-color: #2a2a2a;
+            }
+        """)
         self.prev_btn.clicked.connect(self.prev_page)
         
         self.page_label = QLabel("1 / 1")
-        self.page_label.setMinimumWidth(70)
+        self.page_label.setFixedWidth(70)
         self.page_label.setAlignment(Qt.AlignCenter)
-        self.page_label.setStyleSheet("font-size: 11px; font-weight: bold;")
+        self.page_label.setStyleSheet("""
+            font-size: 13px;
+            font-weight: bold;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 5px;
+        """)
         
         self.next_btn = QPushButton("▶")
-        self.next_btn.setFixedSize(30, 28)
-        self.next_btn.setToolTip("Next Page (→)")
+        self.next_btn.setToolTip("다음 페이지 (→)")
+        self.next_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: bold;
+                background-color: #3c3c3c;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 50px;
+                max-width: 50px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+                border: 1px solid #007acc;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                color: #666;
+                background-color: #2a2a2a;
+            }
+        """)
         self.next_btn.clicked.connect(self.next_page)
-        
-        self.page_input = QLineEdit()
-        self.page_input.setFixedWidth(50)
-        self.page_input.setPlaceholderText("Go")
-        self.page_input.setToolTip("Enter page number and press Enter")
-        self.page_input.returnPressed.connect(self.go_to_page)
-        
-        # 새로고침 버튼
-        self.refresh_btn = QPushButton("🔄")
-        self.refresh_btn.setFixedSize(30, 28)
-        self.refresh_btn.setToolTip("Refresh Preview (Ctrl+R)")
-        self.refresh_btn.setStyleSheet("font-size: 14px;")
+                
+        # 새로고침 버튼 (아이콘으로 변경)
+        self.refresh_btn = QPushButton("⟳")
+        self.refresh_btn.setToolTip("미리보기 새로고침 (Ctrl+R)")
+        self.refresh_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: bold;
+                background-color: #007acc;
+                border: 1px solid #005a9e;
+                border-radius: 6px;
+                padding: 4px;
+                min-width: 44px;
+                max-width: 44px;
+                min-height: 36px;
+                max-height: 36px;
+                color: #ffffff;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+            QPushButton:pressed {
+                background-color: #004578;
+            }
+        """)
+        self.refresh_btn.clicked.connect(self.refresh_preview)
         
         # 툴바에 위젯 추가
-        toolbar_layout.addWidget(self.zoom_label)
-        toolbar_layout.addWidget(self.zoom_slider)
+        # toolbar_layout.addWidget(self.zoom_label)
+        toolbar_layout.addWidget(self.zoom_out_btn)
         toolbar_layout.addWidget(self.zoom_value)
         toolbar_layout.addWidget(self.zoom_in_btn)
-        toolbar_layout.addWidget(self.zoom_out_btn)
         toolbar_layout.addWidget(self.reset_zoom_btn)
-        toolbar_layout.addWidget(separator1)  # 구분선 추가
+        toolbar_layout.addWidget(separator1)
         toolbar_layout.addWidget(self.fit_width_btn)
         toolbar_layout.addWidget(self.fit_height_btn)
         toolbar_layout.addWidget(self.fit_page_btn)
-        toolbar_layout.addWidget(separator2)  # 구분선 추가
+        toolbar_layout.addWidget(separator2)
         toolbar_layout.addWidget(self.prev_btn)
         toolbar_layout.addWidget(self.page_label)
         toolbar_layout.addWidget(self.next_btn)
-        toolbar_layout.addWidget(self.page_input)
         toolbar_layout.addStretch()
         toolbar_layout.addWidget(self.refresh_btn)
         
@@ -561,7 +738,7 @@ class PDFPreviewWidget(QWidget):
         self.scroll_area.setStyleSheet("""
             QScrollArea {
                 border: none;
-                background-color: #f5f5f5;
+                background-color: #1e1e1e;
             }
         """)
         
@@ -569,18 +746,18 @@ class PDFPreviewWidget(QWidget):
         self.preview_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.preview_label.setStyleSheet("""
             QLabel {
-                background-color: #ffffff;
-                border: 1px solid #ddd;
+                background-color: #2d2d2d;
+                border: 1px solid #3d3d3d;
                 border-radius: 8px;
             }
         """)
         self.scroll_area.setWidget(self.preview_label)
         
         # 상태 표시줄
-        self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; padding: 4px; font-size: 10px;")
+        self.status_label = QLabel("준비됨")
+        self.status_label.setStyleSheet("color: #cccccc; padding: 5px; font-size: 11px; background-color: #1e1e1e; border-radius: 4px;")
         
-        layout.addLayout(toolbar_layout)
+        layout.addWidget(toolbar_widget)
         layout.addWidget(self.scroll_area, 1)
         layout.addWidget(self.status_label)
         
@@ -589,28 +766,36 @@ class PDFPreviewWidget(QWidget):
         
         # 마우스 트래킹 활성화
         self.preview_label.setMouseTracking(True)
-        
-    def on_zoom_slider_changed(self, value):
-        """슬라이더로 줌 변경"""
-        self.zoom_factor = value / 100.0
-        self.fit_mode = "none"
-        self.zoom_value.setText(f"{value}%")
-        self.update_preview()
-        
+
+    def refresh_preview(self):
+        """미리보기 새로고침"""
+        if hasattr(self.parent(), 'generate_live_preview'):
+            self.parent().generate_live_preview() 
+    
     def zoom_in(self):
         """확대"""
-        new_value = min(300, self.zoom_slider.value() + 10)
-        self.zoom_slider.setValue(new_value)
+        current = int(self.zoom_value.text().rstrip('%'))
+        new_value = min(300, current + 10)
+        self.zoom_value.setText(f"{new_value}%")
+        self.zoom_factor = new_value / 100.0
+        self.fit_mode = "none"
+        self.update_preview()
         
     def zoom_out(self):
         """축소"""
-        new_value = max(30, self.zoom_slider.value() - 10)
-        self.zoom_slider.setValue(new_value)
+        current = int(self.zoom_value.text().rstrip('%'))
+        new_value = max(30, current - 10)
+        self.zoom_value.setText(f"{new_value}%")
+        self.zoom_factor = new_value / 100.0
+        self.fit_mode = "none"
+        self.update_preview()
         
     def reset_zoom(self):
         """줌 리셋 (100%)"""
-        self.zoom_slider.setValue(100)
+        self.zoom_value.setText("100%")
+        self.zoom_factor = 1.0
         self.fit_mode = "none"
+        self.update_preview()
         
     def fit_to_width(self):
         """너비에 맞추기"""
@@ -621,11 +806,12 @@ class PDFPreviewWidget(QWidget):
         available_width = self.scroll_area.viewport().width() - 20
         if available_width > 0:
             target_width = available_width
-            target_height = int(self.original_pixmap.height() * (target_width / self.original_pixmap.width()))
             zoom_percent = int((target_width / self.original_pixmap.width()) * 100)
-            self.zoom_slider.setValue(min(300, max(30, zoom_percent)))
-        self.update_preview()
-        
+            zoom_percent = min(300, max(30, zoom_percent))
+            self.zoom_value.setText(f"{zoom_percent}%")
+            self.zoom_factor = zoom_percent / 100.0
+            self.update_preview()
+            
     def fit_to_height(self):
         """높이에 맞추기"""
         if not self.original_pixmap:
@@ -635,11 +821,12 @@ class PDFPreviewWidget(QWidget):
         available_height = self.scroll_area.viewport().height() - 20
         if available_height > 0:
             target_height = available_height
-            target_width = int(self.original_pixmap.width() * (target_height / self.original_pixmap.height()))
             zoom_percent = int((target_height / self.original_pixmap.height()) * 100)
-            self.zoom_slider.setValue(min(300, max(30, zoom_percent)))
-        self.update_preview()
-        
+            zoom_percent = min(300, max(30, zoom_percent))
+            self.zoom_value.setText(f"{zoom_percent}%")
+            self.zoom_factor = zoom_percent / 100.0
+            self.update_preview()
+            
     def fit_to_page(self):
         """페이지 전체에 맞추기"""
         if not self.original_pixmap:
@@ -654,22 +841,42 @@ class PDFPreviewWidget(QWidget):
             height_ratio = available_height / self.original_pixmap.height()
             zoom_ratio = min(width_ratio, height_ratio)
             zoom_percent = int(zoom_ratio * 100)
-            self.zoom_slider.setValue(min(300, max(30, zoom_percent)))
-        self.update_preview()
-        
-    def go_to_page(self):
-        """특정 페이지로 이동"""
-        try:
-            page_num = int(self.page_input.text()) - 1
-            if 0 <= page_num < self.total_pages:
-                self.current_page = page_num
-                self.update_preview()
-                self.page_input.clear()
-            else:
-                self.status_label.setText(f"Page {page_num + 1} out of range (1-{self.total_pages})")
-        except ValueError:
-            pass
+            zoom_percent = min(300, max(30, zoom_percent))
+            self.zoom_value.setText(f"{zoom_percent}%")
+            self.zoom_factor = zoom_percent / 100.0
+            self.update_preview()
             
+    def set_preview_image(self, pixmap):
+        """미리보기 이미지 설정"""
+        if pixmap and not pixmap.isNull():
+            self.original_pixmap = pixmap
+            
+            # zoom_factor 사용 (zoom_slider 대신)
+            zoom = self.zoom_factor
+            
+            # 원본 크기 계산
+            original_width = pixmap.width()
+            original_height = pixmap.height()
+            
+            # 줌 적용
+            scaled_pixmap = pixmap.scaled(
+                int(original_width * zoom),
+                int(original_height * zoom),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            
+            self.preview_label.setPixmap(scaled_pixmap)
+            self.preview_label.setFixedSize(scaled_pixmap.size())
+            
+            zoom_percent = int(zoom * 100)
+            self.status_label.setText(f"✅ Page {self.current_page + 1} | Zoom: {zoom_percent}% | Size: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
+        else:
+            self.original_pixmap = None
+            self.preview_label.setText("📄 No preview available\n\nClick 'Refresh' to generate PDF preview")
+            self.preview_label.setFixedSize(400, 300)
+            self.status_label.setText("No preview available")
+                    
     def update_navigation_buttons(self):
         self.prev_btn.setEnabled(self.current_page > 0)
         self.next_btn.setEnabled(self.current_page < self.total_pages - 1)
@@ -725,35 +932,6 @@ class PDFPreviewWidget(QWidget):
                 self.refresh_btn.click()
         else:
             super().keyPressEvent(event)
-            
-    def set_preview_image(self, pixmap):
-        """미리보기 이미지 설정"""
-        if pixmap and not pixmap.isNull():
-            self.original_pixmap = pixmap
-            
-            zoom = self.zoom_slider.value() / 100.0
-            
-            # 원본 크기 계산
-            original_width = pixmap.width()
-            original_height = pixmap.height()
-            
-            # 줌 적용
-            scaled_pixmap = pixmap.scaled(
-                int(original_width * zoom),
-                int(original_height * zoom),
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
-            
-            self.preview_label.setPixmap(scaled_pixmap)
-            self.preview_label.setFixedSize(scaled_pixmap.size())
-            
-            self.status_label.setText(f"✅ Page {self.current_page + 1} | Zoom: {self.zoom_slider.value()}% | Size: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
-        else:
-            self.original_pixmap = None
-            self.preview_label.setText("📄 No preview available\n\nClick 'Refresh' to generate PDF preview")
-            self.preview_label.setFixedSize(400, 300)
-            self.status_label.setText("No preview available")
             
     def update_preview(self):
         if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
@@ -894,9 +1072,40 @@ class DatabaseBrowserDialog(QDialog):
     
     def init_ui(self):
         layout = QVBoxLayout()
+    
+        # 다이얼로그 자체에 다크 스타일 적용
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2d2d2d;
+            }
+            QLabel {
+                color: #e0e0e0;
+            }
+            QGroupBox {
+                color: #e0e0e0;
+                border: 1px solid #3d3d3d;
+                border-radius: 8px;
+                margin-top: 10px;
+            }
+            QGroupBox::title {
+                color: #007acc;
+            }
+            QListWidget {
+                background-color: #252526;
+                color: #e0e0e0;
+                border: 1px solid #3d3d3d;
+                border-radius: 8px;
+            }
+            QListWidget::item:selected {
+                background-color: #0d7377;
+            }
+            QListWidget::item:hover {
+                background-color: #3d3d3d;
+            }
+        """)
         
         title = QLabel("📚 Question Database")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1a73e8; margin-bottom: 10px;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #007acc; margin-bottom: 10px;")
         layout.addWidget(title)
         
         filter_group = QGroupBox("Search Filters")
@@ -1234,9 +1443,10 @@ class GeneratorApp(QMainWindow):
 
         self.list_widget = QListWidget()
         self.list_widget.setDragDropMode(QAbstractItemView.InternalMove)
-        self.list_widget.setAlternatingRowColors(True)
+        self.list_widget.setAlternatingRowColors(True)  # 이미 True로 설정되어 있음
         self.list_widget.model().rowsMoved.connect(self.on_list_reordered)
 
+        # 버튼 레이아웃 추가 (이 부분이 누락되었습니다!)
         btn_layout_center = QHBoxLayout()
         btn_delete = QPushButton("🗑 Delete Selected")
         btn_delete.clicked.connect(self.delete_question)
@@ -1250,7 +1460,7 @@ class GeneratorApp(QMainWindow):
 
         center_layout.addWidget(list_title)
         center_layout.addWidget(self.list_widget)
-        center_layout.addLayout(btn_layout_center)
+        center_layout.addLayout(btn_layout_center)  # 이 부분이 중요합니다!
         center_card.setLayout(center_layout)
 
         # ===== RIGHT: PREVIEW + SETTINGS + ACTION =====
@@ -1262,16 +1472,6 @@ class GeneratorApp(QMainWindow):
         # Preview Title (간단하게)
         preview_title = QLabel("👁️ Live PDF Preview")
         preview_title.setObjectName("title")
-        preview_title.setStyleSheet("""
-            QLabel#title {
-                font-size: 16px;
-                font-weight: bold;
-                color: #1a73e8;
-                margin-bottom: 0px;
-                border-bottom: none;
-                padding-bottom: 0px;
-            }
-        """)
         right_layout.addWidget(preview_title)
 
         # Settings Summary (한 줄 + Edit 버튼)
@@ -1542,22 +1742,18 @@ class GeneratorApp(QMainWindow):
         return total_height + 30
 
     def _draw_question_content(self, c, q, margin_left, current_y, line_height, font_size, available_width):
-        """문제 유형별 내용 표시"""
+        """문제 유형별 내용 표시 (Answer: ___ 제거)"""
         
         if q["type"] == 0:  # Multiple Choice
             for i, choice in enumerate(q.get("choices", []), 1):
                 choice_display = choice[:70] + "..." if len(choice) > 70 else choice
                 c.drawString(margin_left + 10, current_y, f"   {chr(96+i)}. {choice_display}")
                 current_y -= line_height - 4
-            if self.settings.get('show_answer_lines', True):
-                current_y -= line_height - 4
-                c.drawString(margin_left, current_y, f"Answer: ______")
+            # Answer: ___ 제거
         
         elif q["type"] == 1:  # True/False
             c.drawString(margin_left + 10, current_y, "( ) True   ( ) False")
-            if self.settings.get('show_answer_lines', True):
-                current_y -= line_height - 4
-                c.drawString(margin_left, current_y, f"Answer: ______")
+            # Answer: ___ 제거
         
         elif q["type"] == 2:  # Fill in Blank
             blank_count = len(q.get("blanks", [])) or 3
@@ -1565,8 +1761,8 @@ class GeneratorApp(QMainWindow):
             c.drawString(margin_left + 10, current_y, blanks)
         
         elif q["type"] == 3:  # Short Answer
-            if self.settings.get('show_answer_lines', True):
-                c.drawString(margin_left + 10, current_y, "Answer: ____________________")
+            # Answer: ___ 제거
+            c.drawString(margin_left + 10, current_y, "____________________")
         
         elif q["type"] == 4:  # Essay
             c.drawString(margin_left + 10, current_y, "[Write your answer below]")
@@ -1786,7 +1982,7 @@ class GeneratorApp(QMainWindow):
         return current_y
 
     def _draw_question_content_two_col_v3(self, c, q, x, current_y, line_height, font_size, col_width):
-        """문제 내용 표시 (간격 최적화)"""
+        """문제 내용 표시 (Answer: ___ 제거)"""
         bottom_margin = 8  # 내용 하단 여백 추가
         
         if q["type"] == 0:  # Multiple Choice
@@ -1795,16 +1991,12 @@ class GeneratorApp(QMainWindow):
                 choice_display = choice[:35] + "..." if len(choice) > 35 else choice
                 c.drawString(x + 8, current_y, f"   {chr(96+i)}. {choice_display}")
                 current_y -= line_height - 2
-            if self.settings.get('show_answer_lines', True):
-                current_y -= line_height - 2
-                c.drawString(x + 8, current_y, f"   Answer: _____")
+            # Answer: ___ 제거
             current_y -= bottom_margin
         
         elif q["type"] == 1:  # True/False
             c.drawString(x + 8, current_y, "   ( ) True   ( ) False")
-            if self.settings.get('show_answer_lines', True):
-                current_y -= line_height - 2
-                c.drawString(x + 8, current_y, f"   Answer: _____")
+            # Answer: ___ 제거
             current_y -= bottom_margin
         
         elif q["type"] == 2:  # Fill in Blank
@@ -1814,8 +2006,8 @@ class GeneratorApp(QMainWindow):
             current_y -= bottom_margin
         
         elif q["type"] == 3:  # Short Answer
-            if self.settings.get('show_answer_lines', True):
-                c.drawString(x + 8, current_y, "   Answer: _______________")
+            # Answer: ___ 제거 - 빈 줄만 남김
+            c.drawString(x + 8, current_y, "   _______________")
             current_y -= bottom_margin
         
         elif q["type"] == 4:  # Essay
@@ -1888,15 +2080,26 @@ class GeneratorApp(QMainWindow):
         c.drawCentredString(width/2, current_y, exam_title)
         current_y -= 22
         
-        # 날짜 정보
+        # 날짜 및 QR 코드, 총점 표시
         c.setFont("Helvetica", 10)
-        c.drawString(margin_left, current_y, f"Date: {exam_date}")
         
-        # 총점 정보
+        # 날짜 대신 QR 코드를 왼쪽에 표시
         total_points = sum(q.get('score', 0) for q in self.questions)
         
         if self.settings.get('show_qr', True):
-            c.drawRightString(width - margin_right - 55, current_y, f"Total: {total_points} pts")
+            qr_data = json.dumps({
+                "exam": exam_title,
+                "date": exam_date,
+                "questions": len(self.questions),
+                "total_score": total_points
+            })
+            qr_path = generate_qr(qr_data, f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            c.drawImage(qr_path, margin_left, current_y - 15, width=35, height=35)
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+            
+            # 오른쪽에 총점만 표시
+            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
         else:
             c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
         
@@ -1916,25 +2119,12 @@ class GeneratorApp(QMainWindow):
         c.line(margin_left, current_y, width - margin_right, current_y)
         current_y -= 15
         
-        # ===== 학생 정보 영역 =====
-        current_y = self._draw_student_info(c, width, height, margin_left, margin_right, 
-                                            current_y, available_width)
+        # ===== 학생 정보 영역 제거 (주석 처리 또는 삭제) =====
+        # current_y = self._draw_student_info(c, width, height, margin_left, margin_right, 
+        #                                     current_y, available_width)
         
-        # 학생정보와 문제영역 사이 간격을 25로 증가
-        current_y -= 25
-        
-        # ===== QR 코드 =====
-        if self.settings.get('show_qr', True):
-            qr_data = json.dumps({
-                "exam": exam_title,
-                "date": exam_date,
-                "questions": len(self.questions),
-                "total_score": total_points
-            })
-            qr_path = generate_qr(qr_data, f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-            c.drawImage(qr_path, width - margin_right - 45, height - margin_top - 35, width=35, height=35)
-            if os.path.exists(qr_path):
-                os.remove(qr_path)
+        # 학생정보와 문제영역 사이 간격 조정 (제거했으므로 간격 축소)
+        current_y -= 15
         
         # ===== 질문 영역 =====
         if layout_style == "Two Column":
@@ -2024,82 +2214,254 @@ class GeneratorApp(QMainWindow):
 
     def apply_style(self):
         self.setStyleSheet("""
-            QWidget { background-color: #f0f2f5; font-family: 'Segoe UI', Arial; font-size: 12px; }
-
-            #card {
-                background: white;
-                border-radius: 16px;
-                padding: 20px;
-                border: 1px solid #e0e0e0;
+            /* 전체 배경 */
+            QWidget {
+                background-color: #1e1e1e;
+                font-family: 'Segoe UI', 'Malgun Gothic', Arial;
+                font-size: 12px;
+                color: #e0e0e0;
             }
 
-            #title {
+            /* 카드 스타일 */
+            QFrame#card, QWidget#card {
+                background: #2d2d2d;
+                border-radius: 16px;
+                padding: 20px;
+                border: 1px solid #3d3d3d;
+            }
+
+            /* 제목 스타일 */
+            QLabel#title {
                 font-size: 18px;
                 font-weight: bold;
-                color: #1a73e8;
+                color: #007acc;
                 margin-bottom: 16px;
-                border-bottom: 2px solid #1a73e8;
+                border-bottom: 2px solid #007acc;
                 padding-bottom: 8px;
             }
 
+            /* 그룹 박스 */
             QGroupBox {
                 font-weight: bold;
-                border: 1px solid #ddd;
+                border: 1px solid #3d3d3d;
                 border-radius: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
+                color: #e0e0e0;
             }
 
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
+                color: #007acc;
             }
 
+            /* 버튼 공통 스타일 */
             QPushButton {
-                background-color: #1a73e8;
+                background-color: #0d7377;
                 color: white;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 10px 16px;
                 font-weight: bold;
+                font-size: 13px;
                 border: none;
+                min-height: 20px;
             }
 
-            QPushButton:hover { background-color: #1557b0; }
-            QPushButton:pressed { background-color: #0d3c7a; }
+            QPushButton:hover {
+                background-color: #14a085;
+            }
+            
+            QPushButton:pressed {
+                background-color: #0a5a5e;
+            }
 
+            /* 데이터베이스 버튼 스타일 */
+            QPushButton#db_load {
+                background-color: #007acc;
+            }
+            QPushButton#db_load:hover {
+                background-color: #005a9e;
+            }
+            
+            QPushButton#db_save {
+                background-color: #28a745;
+            }
+            QPushButton#db_save:hover {
+                background-color: #218838;
+            }
+            
+            QPushButton#clear_all {
+                background-color: #dc3545;
+            }
+            QPushButton#clear_all:hover {
+                background-color: #c82333;
+            }
+
+            /* 텍스트 입력 필드 */
             QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                border: 1px solid #ccc;
+                border: 1px solid #3d3d3d;
                 border-radius: 8px;
                 padding: 8px;
-                background: white;
+                background: #252526;
+                color: #e0e0e0;
                 font-size: 12px;
+                min-height: 20px;
             }
 
             QTextEdit:focus, QLineEdit:focus {
-                border: 2px solid #1a73e8;
+                border: 2px solid #007acc;
             }
 
+            QComboBox::drop-down {
+                border: none;
+            }
+            
+            QComboBox QAbstractItemView {
+                background-color: #252526;
+                color: #e0e0e0;
+                selection-background-color: #007acc;
+                border: 1px solid #3d3d3d;
+            }
+
+            /* 리스트 위젯 - 짝수/홀수 행 색상 구분 확실히 */
             QListWidget {
-                border: 1px solid #ddd;
+                border: 1px solid #3d3d3d;
                 border-radius: 8px;
                 padding: 5px;
+                font-size: 12px;
+                background-color: #252526;
+                color: #e0e0e0;
+                alternate-background-color: #2d2d2d;
             }
 
             QListWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #eee;
+                padding: 10px;
+                border-bottom: 1px solid #3d3d3d;
+                background-color: #252526;
+                color: #e0e0e0;
+            }
+
+            QListWidget::item:alternate {
+                background-color: #2d2d2d;
+                color: #e0e0e0;
             }
 
             QListWidget::item:selected {
-                background-color: #e8f0fe;
-                color: #1a73e8;
+                background-color: #0d7377;
+                color: #ffffff;
             }
             
+            QListWidget::item:hover:!selected {
+                background-color: #3d3d3d;
+                color: #ffffff;
+            }
+
+            /* 체크박스 */
             QCheckBox {
-                spacing: 5px;
+                spacing: 8px;
+                font-size: 12px;
+                color: #e0e0e0;
+            }
+            
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 4px;
+                border: 1px solid #3d3d3d;
+                background-color: #252526;
+            }
+            
+            QCheckBox::indicator:checked {
+                background-color: #007acc;
+                border: 1px solid #007acc;
+            }
+
+            /* 탭 위젯 스타일 */
+            QTabWidget::pane {
+                border: 1px solid #3d3d3d;
+                border-radius: 8px;
+                background: #2d2d2d;
+            }
+            
+            QTabBar::tab {
+                padding: 8px 16px;
+                font-size: 12px;
+                font-weight: bold;
+                background-color: #252526;
+                color: #e0e0e0;
+                border-radius: 6px 6px 0 0;
+            }
+            
+            QTabBar::tab:selected {
+                background-color: #007acc;
+                color: white;
+            }
+            
+            QTabBar::tab:hover:!selected {
+                background-color: #3d3d3d;
+            }
+
+            /* 스크롤바 */
+            QScrollBar:vertical {
+                background-color: #252526;
+                width: 12px;
+                border-radius: 6px;
+            }
+            
+            QScrollBar::handle:vertical {
+                background-color: #3d3d3d;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            
+            QScrollBar::handle:vertical:hover {
+                background-color: #4d4d4d;
+            }
+            
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            
+            QScrollBar:horizontal {
+                background-color: #252526;
+                height: 12px;
+                border-radius: 6px;
+            }
+            
+            QScrollBar::handle:horizontal {
+                background-color: #3d3d3d;
+                border-radius: 6px;
+                min-width: 20px;
+            }
+            
+            QScrollBar::handle:horizontal:hover {
+                background-color: #4d4d4d;
+            }
+            
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+            }
+
+            /* 다이얼로그 */
+            QDialog {
+                background-color: #2d2d2d;
+            }
+            
+            QMessageBox {
+                background-color: #2d2d2d;
+            }
+            
+            QMessageBox QPushButton {
+                min-width: 80px;
             }
         """)
+
+        # Database 버튼들에 objectName 설정
+        self.load_db_btn.setObjectName("db_load")
+        self.save_db_btn.setObjectName("db_save")
+        self.clear_all_btn.setObjectName("clear_all")
 
     def duplicate_question(self):
         current_row = self.list_widget.currentRow()
@@ -2250,14 +2612,27 @@ class GeneratorApp(QMainWindow):
 
     def update_list_display(self):
         self.list_widget.clear()
-        for q in self.questions:
+        for idx, q in enumerate(self.questions):
             qinfo = QUESTION_TYPES.get(q["type"], {})
             icon = qinfo.get("icon", "❓")
-            display_text = f"{icon} Q{q['id']}. {q['text'][:50]}"
+            
+            # 텍스트를 더 읽기 쉽게 구성
+            q_text_preview = q['text'][:60]
+            if len(q['text']) > 60:
+                q_text_preview += "..."
+                
+            option_info = ""
             if q.get("choices") and len(q.get("choices", [])) > 0:
-                display_text += f" [{len(q['choices'])} options]"
-            display_text += f" ({q['score']} pts)"
-            self.list_widget.addItem(display_text)
+                option_info = f" [{len(q['choices'])} options]"
+                
+            display_text = f"{icon} Q{q['id']}. {q_text_preview}{option_info} ({q['score']} pts) - {q.get('difficulty', 'Medium')}"
+            
+            item = QListWidgetItem(display_text)
+            # 폰트 설정으로 가독성 향상
+            font = QFont()
+            font.setPointSize(11)
+            item.setFont(font)
+            self.list_widget.addItem(item)
 
     def delete_question(self):
         current_row = self.list_widget.currentRow()
