@@ -433,9 +433,10 @@ class PDFPreviewWidget(QWidget):
         self.current_pdf_path = None
         self.current_page = 0
         self.total_pages = 0
-        self.zoom_factor = 1.0  # 줌 팩터 추가
+        self.zoom_factor = 1.0
+        self.fit_mode = "none"  # none, width, height
+        self.original_pixmap = None  # 원본 픽스맵 저장
         self.init_ui()
-        # 스크롤 영역의 위치 저장 변수 추가
         self.last_scroll_pos = None
         
     def init_ui(self):
@@ -443,57 +444,129 @@ class PDFPreviewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
         
-        # 상단 툴바 (더 컴팩트하게)
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(8)
+        # 상단 툴바 (더 많은 기능 추가)
+        toolbar_layout = QHBoxLayout()
+        toolbar_layout.setSpacing(8)
         
+        # 줌 컨트롤
         self.zoom_label = QLabel("Zoom:")
         self.zoom_label.setStyleSheet("font-size: 11px;")
         
         self.zoom_slider = QSlider(Qt.Horizontal)
-        self.zoom_slider.setRange(30, 200)
-        self.zoom_slider.setValue(85)
+        self.zoom_slider.setRange(30, 300)
+        self.zoom_slider.setValue(100)
         self.zoom_slider.setTickPosition(QSlider.TicksBelow)
         self.zoom_slider.setTickInterval(25)
         self.zoom_slider.setFixedWidth(150)
-        self.zoom_slider.valueChanged.connect(self.on_zoom_changed)
+        self.zoom_slider.valueChanged.connect(self.on_zoom_slider_changed)
         
-        self.zoom_value = QLabel("85%")
-        self.zoom_value.setFixedWidth(40)
-        self.zoom_value.setStyleSheet("font-size: 11px;")
+        self.zoom_value = QLabel("100%")
+        self.zoom_value.setFixedWidth(45)
+        self.zoom_value.setStyleSheet("font-size: 11px; font-weight: bold;")
         
+        # 줌 버튼
+        self.zoom_in_btn = QPushButton("🔍+")
+        self.zoom_in_btn.setFixedSize(35, 28)
+        self.zoom_in_btn.setToolTip("Zoom In (Ctrl+Scroll Up)")
+        self.zoom_in_btn.clicked.connect(self.zoom_in)
+        
+        self.zoom_out_btn = QPushButton("🔍-")
+        self.zoom_out_btn.setFixedSize(35, 28)
+        self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+Scroll Down)")
+        self.zoom_out_btn.clicked.connect(self.zoom_out)
+        
+        self.reset_zoom_btn = QPushButton("↺")
+        self.reset_zoom_btn.setFixedSize(35, 28)
+        self.reset_zoom_btn.setToolTip("Reset Zoom (100%)")
+        self.reset_zoom_btn.clicked.connect(self.reset_zoom)
+        
+        # Fit 버튼
+        self.fit_width_btn = QPushButton("📏 Fit Width")
+        self.fit_width_btn.setFixedSize(85, 28)
+        self.fit_width_btn.setToolTip("Fit to Width (Ctrl+W)")
+        self.fit_width_btn.clicked.connect(self.fit_to_width)
+        
+        self.fit_height_btn = QPushButton("📐 Fit Height")
+        self.fit_height_btn.setFixedSize(85, 28)
+        self.fit_height_btn.setToolTip("Fit to Height (Ctrl+H)")
+        self.fit_height_btn.clicked.connect(self.fit_to_height)
+        
+        self.fit_page_btn = QPushButton("📄 Fit Page")
+        self.fit_page_btn.setFixedSize(85, 28)
+        self.fit_page_btn.setToolTip("Fit Whole Page (Ctrl+F)")
+        self.fit_page_btn.clicked.connect(self.fit_to_page)
+        
+        # 구분선 (레이아웃용)
+        separator1 = QFrame()
+        separator1.setFrameShape(QFrame.VLine)
+        separator1.setFrameShadow(QFrame.Sunken)
+        separator1.setFixedWidth(2)
+        
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.VLine)
+        separator2.setFrameShadow(QFrame.Sunken)
+        separator2.setFixedWidth(2)
+        
+        # 페이지 네비게이션
         self.prev_btn = QPushButton("◀")
         self.prev_btn.setFixedSize(30, 28)
-        self.prev_btn.setToolTip("Previous Page")
+        self.prev_btn.setToolTip("Previous Page (←)")
         self.prev_btn.clicked.connect(self.prev_page)
         
         self.page_label = QLabel("1 / 1")
-        self.page_label.setMinimumWidth(60)
+        self.page_label.setMinimumWidth(70)
         self.page_label.setAlignment(Qt.AlignCenter)
         self.page_label.setStyleSheet("font-size: 11px; font-weight: bold;")
         
         self.next_btn = QPushButton("▶")
         self.next_btn.setFixedSize(30, 28)
-        self.next_btn.setToolTip("Next Page")
+        self.next_btn.setToolTip("Next Page (→)")
         self.next_btn.clicked.connect(self.next_page)
         
+        self.page_input = QLineEdit()
+        self.page_input.setFixedWidth(50)
+        self.page_input.setPlaceholderText("Go")
+        self.page_input.setToolTip("Enter page number and press Enter")
+        self.page_input.returnPressed.connect(self.go_to_page)
+        
+        # 새로고침 버튼
         self.refresh_btn = QPushButton("🔄")
-        self.refresh_btn.setFixedSize(28, 28)
-        self.refresh_btn.setToolTip("Refresh Preview")
+        self.refresh_btn.setFixedSize(30, 28)
+        self.refresh_btn.setToolTip("Refresh Preview (Ctrl+R)")
         self.refresh_btn.setStyleSheet("font-size: 14px;")
         
-        toolbar.addWidget(self.zoom_label)
-        toolbar.addWidget(self.zoom_slider)
-        toolbar.addWidget(self.zoom_value)
-        toolbar.addStretch()
-        toolbar.addWidget(self.prev_btn)
-        toolbar.addWidget(self.page_label)
-        toolbar.addWidget(self.next_btn)
-        toolbar.addWidget(self.refresh_btn)
+        # 툴바에 위젯 추가
+        toolbar_layout.addWidget(self.zoom_label)
+        toolbar_layout.addWidget(self.zoom_slider)
+        toolbar_layout.addWidget(self.zoom_value)
+        toolbar_layout.addWidget(self.zoom_in_btn)
+        toolbar_layout.addWidget(self.zoom_out_btn)
+        toolbar_layout.addWidget(self.reset_zoom_btn)
+        toolbar_layout.addWidget(separator1)  # 구분선 추가
+        toolbar_layout.addWidget(self.fit_width_btn)
+        toolbar_layout.addWidget(self.fit_height_btn)
+        toolbar_layout.addWidget(self.fit_page_btn)
+        toolbar_layout.addWidget(separator2)  # 구분선 추가
+        toolbar_layout.addWidget(self.prev_btn)
+        toolbar_layout.addWidget(self.page_label)
+        toolbar_layout.addWidget(self.next_btn)
+        toolbar_layout.addWidget(self.page_input)
+        toolbar_layout.addStretch()
+        toolbar_layout.addWidget(self.refresh_btn)
         
-        # 미리보기 영역 (확장됨)
-        self.preview_label = PDFPreviewLabel(self)
-        self.preview_label.setAlignment(Qt.AlignCenter)
+        # 미리보기 영역 (스크롤 가능)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setAlignment(Qt.AlignCenter)
+        self.scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: #f5f5f5;
+            }
+        """)
+        
+        self.preview_label = PDFPreviewLabelEnhanced(self)
+        self.preview_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.preview_label.setStyleSheet("""
             QLabel {
                 background-color: #ffffff;
@@ -501,36 +574,102 @@ class PDFPreviewWidget(QWidget):
                 border-radius: 8px;
             }
         """)
-        self.preview_label.setMinimumHeight(550)  # 높이 증가
-        self.preview_label.setScaledContents(False)
-        
-        # 스크롤 영역
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(self.preview_label)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setAlignment(Qt.AlignCenter)
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: #f5f5f5;
-            }
-        """)
+        self.scroll_area.setWidget(self.preview_label)
         
         # 상태 표시줄
         self.status_label = QLabel("Ready")
         self.status_label.setStyleSheet("color: #666; padding: 4px; font-size: 10px;")
         
-        layout.addLayout(toolbar)
-        layout.addWidget(scroll_area, 1)  # 1 = stretch factor
+        layout.addLayout(toolbar_layout)
+        layout.addWidget(self.scroll_area, 1)
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
         self.update_navigation_buttons()
         
-    def on_zoom_changed(self, value):
+        # 마우스 트래킹 활성화
+        self.preview_label.setMouseTracking(True)
+        
+    def on_zoom_slider_changed(self, value):
+        """슬라이더로 줌 변경"""
+        self.zoom_factor = value / 100.0
+        self.fit_mode = "none"
         self.zoom_value.setText(f"{value}%")
         self.update_preview()
         
+    def zoom_in(self):
+        """확대"""
+        new_value = min(300, self.zoom_slider.value() + 10)
+        self.zoom_slider.setValue(new_value)
+        
+    def zoom_out(self):
+        """축소"""
+        new_value = max(30, self.zoom_slider.value() - 10)
+        self.zoom_slider.setValue(new_value)
+        
+    def reset_zoom(self):
+        """줌 리셋 (100%)"""
+        self.zoom_slider.setValue(100)
+        self.fit_mode = "none"
+        
+    def fit_to_width(self):
+        """너비에 맞추기"""
+        if not self.original_pixmap:
+            return
+        self.fit_mode = "width"
+        # 스크롤 영역의 가용 너비 계산
+        available_width = self.scroll_area.viewport().width() - 20
+        if available_width > 0:
+            target_width = available_width
+            target_height = int(self.original_pixmap.height() * (target_width / self.original_pixmap.width()))
+            zoom_percent = int((target_width / self.original_pixmap.width()) * 100)
+            self.zoom_slider.setValue(min(300, max(30, zoom_percent)))
+        self.update_preview()
+        
+    def fit_to_height(self):
+        """높이에 맞추기"""
+        if not self.original_pixmap:
+            return
+        self.fit_mode = "height"
+        # 스크롤 영역의 가용 높이 계산
+        available_height = self.scroll_area.viewport().height() - 20
+        if available_height > 0:
+            target_height = available_height
+            target_width = int(self.original_pixmap.width() * (target_height / self.original_pixmap.height()))
+            zoom_percent = int((target_height / self.original_pixmap.height()) * 100)
+            self.zoom_slider.setValue(min(300, max(30, zoom_percent)))
+        self.update_preview()
+        
+    def fit_to_page(self):
+        """페이지 전체에 맞추기"""
+        if not self.original_pixmap:
+            return
+        self.fit_mode = "page"
+        # 너비와 높이 모두 고려하여 더 작은 비율 선택
+        available_width = self.scroll_area.viewport().width() - 20
+        available_height = self.scroll_area.viewport().height() - 20
+        
+        if available_width > 0 and available_height > 0:
+            width_ratio = available_width / self.original_pixmap.width()
+            height_ratio = available_height / self.original_pixmap.height()
+            zoom_ratio = min(width_ratio, height_ratio)
+            zoom_percent = int(zoom_ratio * 100)
+            self.zoom_slider.setValue(min(300, max(30, zoom_percent)))
+        self.update_preview()
+        
+    def go_to_page(self):
+        """특정 페이지로 이동"""
+        try:
+            page_num = int(self.page_input.text()) - 1
+            if 0 <= page_num < self.total_pages:
+                self.current_page = page_num
+                self.update_preview()
+                self.page_input.clear()
+            else:
+                self.status_label.setText(f"Page {page_num + 1} out of range (1-{self.total_pages})")
+        except ValueError:
+            pass
+            
     def update_navigation_buttons(self):
         self.prev_btn.setEnabled(self.current_page > 0)
         self.next_btn.setEnabled(self.current_page < self.total_pages - 1)
@@ -546,8 +685,52 @@ class PDFPreviewWidget(QWidget):
             self.current_page += 1
             self.update_preview()
             
+    def wheelEvent(self, event):
+        """마우스 휠 이벤트 - Ctrl 키로 줌, 아니면 스크롤"""
+        if event.modifiers() & Qt.ControlModifier:
+            # Ctrl + 휠: 줌 인/아웃
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoom_in()
+            else:
+                self.zoom_out()
+        else:
+            # 일반 휠: 스크롤 영역에 이벤트 전달
+            QApplication.sendEvent(self.scroll_area.viewport(), event)
+            
+    def keyPressEvent(self, event):
+        """키보드 단축키"""
+        if event.key() == Qt.Key_Left:
+            self.prev_page()
+        elif event.key() == Qt.Key_Right:
+            self.next_page()
+        elif event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
+            self.zoom_in()
+        elif event.key() == Qt.Key_Minus:
+            self.zoom_out()
+        elif event.key() == Qt.Key_Home:
+            self.current_page = 0
+            self.update_preview()
+        elif event.key() == Qt.Key_End:
+            self.current_page = self.total_pages - 1
+            self.update_preview()
+        elif event.modifiers() & Qt.ControlModifier:
+            if event.key() == Qt.Key_W:
+                self.fit_to_width()
+            elif event.key() == Qt.Key_H:
+                self.fit_to_height()
+            elif event.key() == Qt.Key_F:
+                self.fit_to_page()
+            elif event.key() == Qt.Key_R:
+                self.refresh_btn.click()
+        else:
+            super().keyPressEvent(event)
+            
     def set_preview_image(self, pixmap):
+        """미리보기 이미지 설정"""
         if pixmap and not pixmap.isNull():
+            self.original_pixmap = pixmap
+            
             zoom = self.zoom_slider.value() / 100.0
             
             # 원본 크기 계산
@@ -562,22 +745,14 @@ class PDFPreviewWidget(QWidget):
                 Qt.SmoothTransformation
             )
             
-            # PDF 영역 사각형 계산 및 설정 (추가된 부분)
-            # 라벨 내에서 이미지가 실제로 위치하는 영역 계산
-            label_size = self.preview_label.size()
-            pixmap_size = scaled_pixmap.size()
-            
-            x = (label_size.width() - pixmap_size.width()) // 2
-            y = (label_size.height() - pixmap_size.height()) // 2
-            
-            pdf_rect = QRect(x, y, pixmap_size.width(), pixmap_size.height())
-            self.preview_label.set_pdf_rect(pdf_rect)  # ← 사각형 설정
-            
             self.preview_label.setPixmap(scaled_pixmap)
-            self.status_label.setText(f"✅ Page {self.current_page + 1} | Zoom: {self.zoom_slider.value()}%")
+            self.preview_label.setFixedSize(scaled_pixmap.size())
+            
+            self.status_label.setText(f"✅ Page {self.current_page + 1} | Zoom: {self.zoom_slider.value()}% | Size: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
         else:
-            self.preview_label.set_pdf_rect(QRect())  # 사각형 초기화
+            self.original_pixmap = None
             self.preview_label.setText("📄 No preview available\n\nClick 'Refresh' to generate PDF preview")
+            self.preview_label.setFixedSize(400, 300)
             self.status_label.setText("No preview available")
             
     def update_preview(self):
@@ -621,12 +796,9 @@ class PDFPreviewWidget(QWidget):
                 
                 self.set_preview_image(pixmap)
                 
-                # 스크롤 위치 복원 (추가된 부분)
                 if self.last_scroll_pos is not None:
-                    scroll_area = self.parent().findChild(QScrollArea)
-                    if scroll_area:
-                        scroll_area.verticalScrollBar().setValue(self.last_scroll_pos)
-                        self.last_scroll_pos = None
+                    self.scroll_area.verticalScrollBar().setValue(self.last_scroll_pos)
+                    self.last_scroll_pos = None
             else:
                 self.preview_label.setText("PDF has no pages")
                 
@@ -644,6 +816,69 @@ class PDFPreviewWidget(QWidget):
         self.current_page = 0
         self.total_pages = 0
         self.update_preview()
+
+
+class PDFPreviewLabelEnhanced(QLabel):
+    """향상된 PDF 미리보기 라벨 - 마우스 드래그 스크롤 지원"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.setStyleSheet("""
+            QLabel {
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+            }
+        """)
+        self.setMinimumSize(100, 100)
+        
+        # 마우스 드래그로 스크롤
+        self.drag_start_pos = None
+        self.drag_start_scroll = None
+        self.setMouseTracking(True)
+        
+    def mousePressEvent(self, event):
+        """마우스 버튼 클릭 - 드래그 시작 위치 저장"""
+        if event.button() == Qt.LeftButton:
+            self.drag_start_pos = event.globalPos()
+            # 부모의 스크롤 영역 찾기
+            scroll_area = self.parent()
+            while scroll_area and not isinstance(scroll_area, QScrollArea):
+                scroll_area = scroll_area.parent()
+            if scroll_area:
+                self.drag_start_scroll = scroll_area.horizontalScrollBar().value(), scroll_area.verticalScrollBar().value()
+            self.setCursor(Qt.ClosedHandCursor)
+            
+    def mouseMoveEvent(self, event):
+        """마우스 이동 - 드래그로 스크롤"""
+        if event.buttons() & Qt.LeftButton and self.drag_start_pos and self.drag_start_scroll:
+            delta = event.globalPos() - self.drag_start_pos
+            scroll_area = self.parent()
+            while scroll_area and not isinstance(scroll_area, QScrollArea):
+                scroll_area = scroll_area.parent()
+            if scroll_area:
+                scroll_area.horizontalScrollBar().setValue(self.drag_start_scroll[0] - delta.x())
+                scroll_area.verticalScrollBar().setValue(self.drag_start_scroll[1] - delta.y())
+                
+    def mouseReleaseEvent(self, event):
+        """마우스 버튼 릴리스"""
+        self.drag_start_pos = None
+        self.drag_start_scroll = None
+        self.setCursor(Qt.ArrowCursor)
+        
+    def wheelEvent(self, event):
+        """마우스 휠 이벤트 - Ctrl 없으면 부모 스크롤 영역으로 전달"""
+        if event.modifiers() & Qt.ControlModifier:
+            # Ctrl+휠: 줌 이벤트는 상위 위젯으로
+            super().wheelEvent(event)
+        else:
+            # 일반 휠: 스크롤 영역으로 전달
+            scroll_area = self.parent()
+            while scroll_area and not isinstance(scroll_area, QScrollArea):
+                scroll_area = scroll_area.parent()
+            if scroll_area:
+                QApplication.sendEvent(scroll_area.viewport(), event)
 
 
 # ---------------- DATABASE BROWSER DIALOG ---------------- 
@@ -1045,9 +1280,10 @@ class GeneratorApp(QMainWindow):
         self.settings_summary.update_summary(self.settings)
         right_layout.addWidget(self.settings_summary)
 
-        # PDF Preview Widget (확장된 영역)
+        # PDF Preview Widget (확장된 영역) - 키보드 포커스 설정
         self.pdf_preview = PDFPreviewWidget()
         self.pdf_preview.refresh_btn.clicked.connect(self.generate_live_preview)
+        self.pdf_preview.setFocusPolicy(Qt.StrongFocus)  # 키보드 이벤트 받기
 
         # 버튼들을 하단에 배치
         button_container = QWidget()
