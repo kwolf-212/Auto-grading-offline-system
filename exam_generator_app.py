@@ -1446,6 +1446,10 @@ class GeneratorApp(QMainWindow):
         self.list_widget.setAlternatingRowColors(True)  # 이미 True로 설정되어 있음
         self.list_widget.model().rowsMoved.connect(self.on_list_reordered)
 
+        # list_font = QFont()
+        # list_font.setPointSize(12)
+        # self.list_widget.setFont(list_font)
+
         # 버튼 레이아웃 추가 (이 부분이 누락되었습니다!)
         btn_layout_center = QHBoxLayout()
         btn_delete = QPushButton("🗑 Delete Selected")
@@ -2218,7 +2222,7 @@ class GeneratorApp(QMainWindow):
             QWidget {
                 background-color: #1e1e1e;
                 font-family: 'Segoe UI', 'Malgun Gothic', Arial;
-                font-size: 12px;
+                font-size: 12px;  /* 기본 폰트 크기 */
                 color: #e0e0e0;
             }
 
@@ -2230,7 +2234,7 @@ class GeneratorApp(QMainWindow):
                 border: 1px solid #3d3d3d;
             }
 
-            /* 제목 스타일 */
+            /* Title - 가장 크게 (18px) */
             QLabel#title {
                 font-size: 18px;
                 font-weight: bold;
@@ -2239,10 +2243,17 @@ class GeneratorApp(QMainWindow):
                 border-bottom: 2px solid #007acc;
                 padding-bottom: 8px;
             }
+            
+            /* 일반 Label - 적당한 크기 (12px) */
+            QLabel {
+                font-size: 12px;
+                color: #e0e0e0;
+            }
 
-            /* 그룹 박스 */
+            /* GroupBox */
             QGroupBox {
                 font-weight: bold;
+                font-size: 12px;
                 border: 1px solid #3d3d3d;
                 border-radius: 8px;
                 margin-top: 10px;
@@ -2255,9 +2266,10 @@ class GeneratorApp(QMainWindow):
                 left: 10px;
                 padding: 0 5px 0 5px;
                 color: #007acc;
+                font-size: 12px;
             }
 
-            /* 버튼 공통 스타일 */
+            /* 버튼 - 약간 크게 (13px) */
             QPushButton {
                 background-color: #0d7377;
                 color: white;
@@ -2280,6 +2292,7 @@ class GeneratorApp(QMainWindow):
             /* 데이터베이스 버튼 스타일 */
             QPushButton#db_load {
                 background-color: #007acc;
+                font-size: 13px;
             }
             QPushButton#db_load:hover {
                 background-color: #005a9e;
@@ -2287,6 +2300,7 @@ class GeneratorApp(QMainWindow):
             
             QPushButton#db_save {
                 background-color: #28a745;
+                font-size: 13px;
             }
             QPushButton#db_save:hover {
                 background-color: #218838;
@@ -2294,6 +2308,7 @@ class GeneratorApp(QMainWindow):
             
             QPushButton#clear_all {
                 background-color: #dc3545;
+                font-size: 13px;
             }
             QPushButton#clear_all:hover {
                 background-color: #c82333;
@@ -2313,20 +2328,36 @@ class GeneratorApp(QMainWindow):
             QTextEdit:focus, QLineEdit:focus {
                 border: 2px solid #007acc;
             }
-
-            QComboBox::drop-down {
-                border: none;
-            }
             
             QComboBox QAbstractItemView {
                 background-color: #252526;
                 color: #e0e0e0;
                 selection-background-color: #007acc;
                 border: 1px solid #3d3d3d;
+                font-size: 12px;
+            }
+            
+            QComboBox {
+                font-size: 12px;
+            }
+            /* 드롭다운 버튼 (화살표 부분) 스타일 */
+            QComboBox::drop-down {
+                border: none;
+                width: 30px;
+                border-left: 1px solid #3d3d3d;
+                border-radius: 0 8px 8px 0;
             }
 
-            /* 리스트 위젯 - 짝수/홀수 행 색상 구분 확실히 */
-            QListWidget {
+            /* 드롭다운 버튼 내부 화살표 아이콘 */
+            QComboBox::down-arrow {
+                width: 12px;
+                height: 12px;
+                background-color: #007acc;  /* 파란색 화살표 배경 */
+                border-radius: 2px;
+            }
+
+            /* ===== 리스트 위젯 - 폰트 크기 강제 적용 ===== */
+            QListWidget, QListView, QAbstractItemView {
                 border: 1px solid #3d3d3d;
                 border-radius: 8px;
                 padding: 5px;
@@ -2341,21 +2372,25 @@ class GeneratorApp(QMainWindow):
                 border-bottom: 1px solid #3d3d3d;
                 background-color: #252526;
                 color: #e0e0e0;
-            }
-
-            QListWidget::item:alternate {
-                background-color: #2d2d2d;
-                color: #e0e0e0;
+                font-size: 12px;
+                min-height: 20px;
             }
 
             QListWidget::item:selected {
                 background-color: #0d7377;
                 color: #ffffff;
+                font-size: 12px;
             }
             
             QListWidget::item:hover:!selected {
                 background-color: #3d3d3d;
                 color: #ffffff;
+                font-size: 12px;
+            }
+            
+            /* QListWidget 내 모든 텍스트에 강제 적용 */
+            QListWidget * {
+                font-size: 12px;
             }
 
             /* 체크박스 */
@@ -2455,6 +2490,40 @@ class GeneratorApp(QMainWindow):
             
             QMessageBox QPushButton {
                 min-width: 80px;
+                font-size: 13px;
+            }
+            
+            /* Tree Widget (Database Browser 등) */
+            QTreeWidget {
+                font-size: 12px;
+            }
+            
+            QTreeWidget::item {
+                font-size: 12px;
+            }
+            
+            /* Table Widget */
+            QTableWidget {
+                font-size: 12px;
+            }
+            
+            QTableWidget::item {
+                font-size: 12px;
+            }
+            
+            /* SpinBox 내부 텍스트 */
+            QSpinBox, QDoubleSpinBox {
+                font-size: 12px;
+            }
+            
+            /* TextEdit 내부 텍스트 */
+            QTextEdit {
+                font-size: 12px;
+            }
+            
+            /* LineEdit 내부 텍스트 */
+            QLineEdit {
+                font-size: 12px;
             }
         """)
 
@@ -2612,6 +2681,9 @@ class GeneratorApp(QMainWindow):
 
     def update_list_display(self):
         self.list_widget.clear()
+        # font = QFont()
+        # font.setPointSize(12)  # 적당한 크기 (12pt)
+        
         for idx, q in enumerate(self.questions):
             qinfo = QUESTION_TYPES.get(q["type"], {})
             icon = qinfo.get("icon", "❓")
@@ -2628,10 +2700,8 @@ class GeneratorApp(QMainWindow):
             display_text = f"{icon} Q{q['id']}. {q_text_preview}{option_info} ({q['score']} pts) - {q.get('difficulty', 'Medium')}"
             
             item = QListWidgetItem(display_text)
-            # 폰트 설정으로 가독성 향상
-            font = QFont()
-            font.setPointSize(11)
-            item.setFont(font)
+            # 폰트 직접 설정 (스타일시트보다 우선 적용됨)
+            # item.setFont(font)
             self.list_widget.addItem(item)
 
     def delete_question(self):
