@@ -1,0 +1,86 @@
+{
+  "exam_info": {
+    "title": "Quick Test - Sample Exam",
+    "date": "December 15, 2024",
+    "total_questions": 10,
+    "total_points": 56
+  },
+  "questions": [
+    {
+      "id": 1,
+      "type": 0,
+      "text": "What is 2 + 2?",
+      "choices": ["3", "4", "5", "6"],
+      "answer": "4",
+      "score": 3
+    },
+    {
+      "id": 2,
+      "type": 0,
+      "text": "Which is a fruit?",
+      "choices": ["Carrot", "Apple", "Broccoli", "Potato"],
+      "answer": "Apple",
+      "score": 3
+    },
+    {
+      "id": 3,
+      "type": 1,
+      "text": "The sky is green.",
+      "answer": "False",
+      "score": 2
+    },
+    {
+      "id": 4,
+      "type": 1,
+      "text": "Water is wet.",
+      "answer": "True",
+      "score": 2
+    },
+    {
+      "id": 5,
+      "type": 2,
+      "text": "The capital of France is __________.",
+      "blanks": ["Paris"],
+      "answer": "Paris",
+      "score": 4
+    },
+    {
+      "id": 6,
+      "type": 3,
+      "text": "What color is a banana?",
+      "answer": "Yellow",
+      "score": 5
+    },
+    {
+      "id": 7,
+      "type": 4,
+      "text": "Describe your favorite hobby in 2-3 sentences.",
+      "answer": "Essay question - open ended",
+      "score": 10
+    },
+    {
+      "id": 8,
+      "type": 5,
+      "text": "Match:",
+      "matching_pairs": [["Dog", "Bark"], ["Cat", "Meow"], ["Cow", "Moo"]],
+      "answer": "1-A,2-B,3-C",
+      "score": 8
+    },
+    {
+      "id": 9,
+      "type": 6,
+      "text": "Order:",
+      "ordering_items": ["Morning", "Night", "Afternoon"],
+      "answer": "Morning, Afternoon, Night",
+      "score": 8
+    },
+    {
+      "id": 10,
+      "type": 8,
+      "text": "Calculate: 5 × 6 = ?",
+      "formula": "5 × 6",
+      "answer": "30",
+      "score": 6
+    }
+  ]
+}
