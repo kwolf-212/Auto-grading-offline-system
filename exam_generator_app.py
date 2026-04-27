@@ -266,9 +266,9 @@ class ExamSettingsDialog(QDialog):
             self.numbering_style.setCurrentIndex(idx)
 
 
-# ---------------- SETTINGS SUMMARY WIDGET ----------------
+# ---------------- SETTINGS SUMMARY WIDGET (간단한 한 줄 형태) ----------------
 class SettingsSummaryWidget(QWidget):
-    """Widget to show settings summary on the right panel"""
+    """간단한 한 줄 설정 요약 위젯"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -276,52 +276,54 @@ class SettingsSummaryWidget(QWidget):
         self.settings = {}
         
     def init_ui(self):
-        layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
         
-        # Title
-        title_label = QLabel("⚙️ Current Settings")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1a73e8;")
-        layout.addWidget(title_label)
+        # 설정 정보 라벨
+        self.settings_label = QLabel()
+        self.settings_label.setStyleSheet("""
+            QLabel {
+                background-color: #f0f2f5;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 12px;
+            }
+        """)
         
-        # Settings display
-        self.settings_text = QTextEdit()
-        self.settings_text.setReadOnly(True)
-        self.settings_text.setMaximumHeight(200)
-        self.settings_text.setStyleSheet("background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 5px;")
-        layout.addWidget(self.settings_text)
-        
-        # Edit button
+        # Edit 버튼
         self.edit_btn = QPushButton("✏️ Edit Settings")
-        self.edit_btn.setStyleSheet("background-color: #17a2b8;")
+        self.edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #138496; }
+        """)
         self.edit_btn.setCursor(Qt.PointingHandCursor)
+        self.edit_btn.setFixedWidth(100)
+        
+        layout.addWidget(self.settings_label, 1)
         layout.addWidget(self.edit_btn)
         
         self.setLayout(layout)
         
     def update_summary(self, settings):
         self.settings = settings
+        exam_title = settings.get('exam_title', 'Untitled') or 'Untitled'
+        exam_date = settings.get('exam_date', '') or datetime.now().strftime('%Y-%m-%d')
+        page_size = settings.get('page_size', 'A4')
+        layout_style = settings.get('layout_style', 'Standard')
         
-        summary = f"""
-📋 Exam: {settings.get('exam_title', 'Not set') or 'Untitled'}
-📅 Date: {settings.get('exam_date', 'Not set') or datetime.now().strftime('%B %d, %Y')}
-
-📄 Page: {settings.get('page_size', 'A4')} | {settings.get('layout_style', 'Standard')}
-📏 Margins: {settings.get('margin', 50)}mm | Line Spacing: {settings.get('line_spacing', 1.5)}x
-🔤 Font: {settings.get('font_size', 11)}pt (Title: {settings.get('title_font_size', 18)}pt)
-
-👤 Student Info: {'✓ Included' if settings.get('include_student_info', True) else '✗ Excluded'}
-📊 Show Points: {'✓' if settings.get('show_points', True) else '✗'}
-🔢 Numbering: {settings.get('numbering_style', '1, 2, 3...')}
-        """
-        
-        if settings.get('include_student_info', True):
-            summary += f"\n📝 Student fields: Name, ID, Department, Instructor, Date"
-        
-        self.settings_text.setText(summary)
+        summary_text = f"📋 {exam_title}  |  📅 {exam_date}  |  📄 {page_size}  |  📐 {layout_style}"
+        self.settings_label.setText(summary_text)
 
 
-# ---------------- PDF PREVIEW WIDGET (개선됨) ---------------- 
+# ---------------- PDF PREVIEW WIDGET (미리보기 영역 확장) ---------------- 
 class PDFPreviewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -333,66 +335,87 @@ class PDFPreviewWidget(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
         
-        # Toolbar
+        # 상단 툴바 (더 컴팩트하게)
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+        
         self.zoom_label = QLabel("Zoom:")
+        self.zoom_label.setStyleSheet("font-size: 11px;")
+        
         self.zoom_slider = QSlider(Qt.Horizontal)
         self.zoom_slider.setRange(30, 200)
-        self.zoom_slider.setValue(80)
+        self.zoom_slider.setValue(85)
         self.zoom_slider.setTickPosition(QSlider.TicksBelow)
         self.zoom_slider.setTickInterval(25)
+        self.zoom_slider.setFixedWidth(150)
         self.zoom_slider.valueChanged.connect(self.on_zoom_changed)
         
-        self.zoom_value = QLabel("80%")
-        self.refresh_btn = QPushButton("🔄 Refresh")
-        self.refresh_btn.setFixedWidth(80)
+        self.zoom_value = QLabel("85%")
+        self.zoom_value.setFixedWidth(40)
+        self.zoom_value.setStyleSheet("font-size: 11px;")
+        
+        self.prev_btn = QPushButton("◀")
+        self.prev_btn.setFixedSize(30, 28)
+        self.prev_btn.setToolTip("Previous Page")
+        self.prev_btn.clicked.connect(self.prev_page)
+        
+        self.page_label = QLabel("1 / 1")
+        self.page_label.setMinimumWidth(60)
+        self.page_label.setAlignment(Qt.AlignCenter)
+        self.page_label.setStyleSheet("font-size: 11px; font-weight: bold;")
+        
+        self.next_btn = QPushButton("▶")
+        self.next_btn.setFixedSize(30, 28)
+        self.next_btn.setToolTip("Next Page")
+        self.next_btn.clicked.connect(self.next_page)
+        
+        self.refresh_btn = QPushButton("🔄")
+        self.refresh_btn.setFixedSize(28, 28)
+        self.refresh_btn.setToolTip("Refresh Preview")
+        self.refresh_btn.setStyleSheet("font-size: 14px;")
         
         toolbar.addWidget(self.zoom_label)
         toolbar.addWidget(self.zoom_slider)
         toolbar.addWidget(self.zoom_value)
         toolbar.addStretch()
-        
-        # Page navigation
-        self.prev_btn = QPushButton("◀ Prev")
-        self.prev_btn.setFixedWidth(60)
-        self.prev_btn.clicked.connect(self.prev_page)
-        self.page_label = QLabel("Page 1 / 1")
-        self.page_label.setMinimumWidth(80)
-        self.next_btn = QPushButton("Next ▶")
-        self.next_btn.setFixedWidth(60)
-        self.next_btn.clicked.connect(self.next_page)
-        
         toolbar.addWidget(self.prev_btn)
         toolbar.addWidget(self.page_label)
         toolbar.addWidget(self.next_btn)
         toolbar.addWidget(self.refresh_btn)
         
-        # Preview label (image display)
+        # 미리보기 영역 (확장됨)
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setStyleSheet("""
             QLabel {
-                background-color: #f5f5f5;
+                background-color: #ffffff;
                 border: 1px solid #ddd;
                 border-radius: 8px;
             }
         """)
-        self.preview_label.setMinimumHeight(500)
+        self.preview_label.setMinimumHeight(550)  # 높이 증가
         self.preview_label.setScaledContents(False)
         
-        # Scroll area
+        # 스크롤 영역
         scroll_area = QScrollArea()
         scroll_area.setWidget(self.preview_label)
         scroll_area.setWidgetResizable(True)
         scroll_area.setAlignment(Qt.AlignCenter)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: #f5f5f5;
+            }
+        """)
         
-        # Status label
+        # 상태 표시줄
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; padding: 4px;")
+        self.status_label.setStyleSheet("color: #666; padding: 4px; font-size: 10px;")
         
         layout.addLayout(toolbar)
-        layout.addWidget(scroll_area)
+        layout.addWidget(scroll_area, 1)  # 1 = stretch factor
         layout.addWidget(self.status_label)
         
         self.setLayout(layout)
@@ -405,7 +428,7 @@ class PDFPreviewWidget(QWidget):
     def update_navigation_buttons(self):
         self.prev_btn.setEnabled(self.current_page > 0)
         self.next_btn.setEnabled(self.current_page < self.total_pages - 1)
-        self.page_label.setText(f"Page {self.current_page + 1} / {max(1, self.total_pages)}")
+        self.page_label.setText(f"{self.current_page + 1} / {max(1, self.total_pages)}")
         
     def prev_page(self):
         if self.current_page > 0:
@@ -420,21 +443,35 @@ class PDFPreviewWidget(QWidget):
     def set_preview_image(self, pixmap):
         if pixmap and not pixmap.isNull():
             zoom = self.zoom_slider.value() / 100.0
+            # 미리보기 영역에 맞게 조정
+            max_width = self.preview_label.width() - 20
+            max_height = self.preview_label.height() - 20
+            
             scaled_pixmap = pixmap.scaled(
                 int(pixmap.width() * zoom),
                 int(pixmap.height() * zoom),
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
+            
+            # 너무 크면 영역에 맞게 조정
+            if scaled_pixmap.width() > max_width:
+                scaled_pixmap = scaled_pixmap.scaled(
+                    max_width,
+                    int(max_width * scaled_pixmap.height() / scaled_pixmap.width()),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+            
             self.preview_label.setPixmap(scaled_pixmap)
-            self.status_label.setText(f"Preview loaded | Page {self.current_page + 1} | Zoom: {self.zoom_slider.value()}%")
+            self.status_label.setText(f"✅ Page {self.current_page + 1} | Zoom: {self.zoom_slider.value()}%")
         else:
-            self.preview_label.setText("No preview available\nClick 'Refresh' to generate PDF preview")
+            self.preview_label.setText("📄 No preview available\n\nClick 'Refresh' to generate PDF preview")
             self.status_label.setText("No preview available")
             
     def update_preview(self):
         if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
-            self.preview_label.setText("No PDF generated yet.\nClick 'Refresh' to generate PDF preview.")
+            self.preview_label.setText("📄 No PDF generated yet.\n\nAdd questions and click 'Refresh' to see preview.")
             self.status_label.setText("No PDF file available")
             self.current_page = 0
             self.total_pages = 0
@@ -444,13 +481,13 @@ class PDFPreviewWidget(QWidget):
         if not PYMUPDF_AVAILABLE:
             file_size = os.path.getsize(self.current_pdf_path) / 1024
             self.preview_label.setText(
-                f"PDF File: {os.path.basename(self.current_pdf_path)}\n"
-                f"Size: {file_size:.1f} KB\n"
-                f"Pages: {self.total_pages}\n\n"
-                f"Install PyMuPDF for actual preview:\n"
-                f"pip install PyMuPDF"
+                f"📄 PDF File: {os.path.basename(self.current_pdf_path)}\n"
+                f"📊 Size: {file_size:.1f} KB\n"
+                f"📑 Pages: {self.total_pages}\n\n"
+                f"⚠️ Install PyMuPDF for actual preview:\n"
+                f"💻 pip install PyMuPDF"
             )
-            self.status_label.setText("PyMuPDF not installed - preview disabled")
+            self.status_label.setText("PyMuPDF not installed")
             return
             
         try:
@@ -464,7 +501,8 @@ class PDFPreviewWidget(QWidget):
             
             if self.total_pages > 0:
                 page = doc[self.current_page]
-                zoom_matrix = fitz.Matrix(1.5, 1.5)
+                # 더 높은 해상도로 렌더링
+                zoom_matrix = fitz.Matrix(2.0, 2.0)
                 pix = page.get_pixmap(matrix=zoom_matrix, alpha=False)
                 
                 img_data = pix.tobytes("png")
@@ -479,7 +517,7 @@ class PDFPreviewWidget(QWidget):
             
         except Exception as e:
             self.status_label.setText(f"Preview error: {str(e)}")
-            self.preview_label.setText(f"Failed to render PDF preview.\nError: {str(e)}")
+            self.preview_label.setText(f"Failed to render PDF preview.\n\nError: {str(e)}")
             self.current_page = 0
             self.total_pages = 0
             self.update_navigation_buttons()
@@ -867,30 +905,70 @@ class GeneratorApp(QMainWindow):
         right_card = QFrame()
         right_card.setObjectName("card")
         right_layout = QVBoxLayout()
+        right_layout.setSpacing(10)
 
+        # Preview Title (간단하게)
         preview_title = QLabel("👁️ Live PDF Preview")
         preview_title.setObjectName("title")
-        
-        # Settings Summary
-        self.settings_summary = SettingsSummaryWidget()
+        preview_title.setStyleSheet("""
+            QLabel#title {
+                font-size: 16px;
+                font-weight: bold;
+                color: #1a73e8;
+                margin-bottom: 0px;
+                border-bottom: none;
+                padding-bottom: 0px;
+            }
+        """)
+        right_layout.addWidget(preview_title)
+
+        # Settings Summary (한 줄 + Edit 버튼)
+        self.settings_summary = SettingsSummaryWidget(self)
         self.settings_summary.edit_btn.clicked.connect(self.open_settings_dialog)
         self.settings_summary.update_summary(self.settings)
-        
-        # PDF Preview Widget
+        right_layout.addWidget(self.settings_summary)
+
+        # PDF Preview Widget (확장된 영역)
         self.pdf_preview = PDFPreviewWidget()
         self.pdf_preview.refresh_btn.clicked.connect(self.generate_live_preview)
 
-        btn_pdf = QPushButton("📄 Save Exam PDF (with QR)")
+        # 버튼들을 하단에 배치
+        button_container = QWidget()
+        button_layout = QHBoxLayout(button_container)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(10)
+
+        btn_pdf = QPushButton("📄 Save Exam PDF")
+        btn_pdf.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #218838; }
+        """)
         btn_pdf.clicked.connect(self.export_pdf)
 
-        btn_answer = QPushButton("📝 Save Answer Sheet PDF")
+        btn_answer = QPushButton("📝 Save Answer Sheet")
+        btn_answer.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #138496; }
+        """)
         btn_answer.clicked.connect(self.export_answer_sheet)
 
-        right_layout.addWidget(preview_title)
-        right_layout.addWidget(self.settings_summary)
-        right_layout.addWidget(self.pdf_preview, 1)
-        right_layout.addWidget(btn_pdf)
-        right_layout.addWidget(btn_answer)
+        button_layout.addWidget(btn_pdf)
+        button_layout.addWidget(btn_answer)
+
+        right_layout.addWidget(self.pdf_preview, 1)  # stretch factor를 1로 설정하여 최대한 확장
+        right_layout.addWidget(button_container)
 
         right_card.setLayout(right_layout)
 
@@ -915,8 +993,9 @@ class GeneratorApp(QMainWindow):
             self.on_content_changed()
             QMessageBox.information(self, "Settings Updated", "Exam settings have been updated successfully.")
 
-    def on_content_changed(self):
-        self.preview_timer.start(1500)
+    def on_content_changed(self):    
+        # Reduced delay for faster preview updates
+        self.preview_timer.start(800)  # Changed from 1500 to 800ms
 
     def on_list_reordered(self):
         for idx, q in enumerate(self.questions):
@@ -927,13 +1006,17 @@ class GeneratorApp(QMainWindow):
     def generate_live_preview(self):
         """Generate PDF and show in preview widget"""
         if not self.questions:
-            self.pdf_preview.status_label.setText("No questions added yet. Add a question to see preview.")
-            self.pdf_preview.preview_label.setText("No questions added.\nAdd questions to see live PDF preview.")
+            self.pdf_preview.status_label.setText("No questions added yet.")
+            self.pdf_preview.preview_label.setText("📄 No questions added.\n\nAdd a question to see live PDF preview.")
             self.pdf_preview.current_pdf_path = None
             self.pdf_preview.current_page = 0
             self.pdf_preview.total_pages = 0
             self.pdf_preview.update_navigation_buttons()
             return
+        
+        # 진행 상태 표시
+        self.pdf_preview.status_label.setText("⏳ Generating preview...")
+        QApplication.processEvents()  # UI 업데이트
         
         temp_dir = tempfile.gettempdir()
         self.temp_pdf_path = os.path.join(temp_dir, f"exam_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
@@ -941,9 +1024,9 @@ class GeneratorApp(QMainWindow):
         try:
             self._generate_pdf_to_file(self.temp_pdf_path, is_preview=True)
             self.pdf_preview.load_pdf(self.temp_pdf_path)
-            self.pdf_preview.status_label.setText(f"Live preview updated | {len(self.questions)} questions")
+            self.pdf_preview.status_label.setText(f"✅ Preview updated | {len(self.questions)} questions")
         except Exception as e:
-            self.pdf_preview.status_label.setText(f"Preview error: {str(e)}")
+            self.pdf_preview.status_label.setText(f"❌ Preview error: {str(e)[:50]}")
 
     def _draw_student_info(self, c, width, height, margin, y):
         """Draw student information section on PDF"""
@@ -1062,6 +1145,93 @@ class GeneratorApp(QMainWindow):
 
         return y
 
+    def _draw_question_two_column(self, c, questions, margin, width, height, line_height, font_size):
+        """Draw questions in two column layout"""
+        col_width = (width - 3 * margin) / 2
+        left_col_x = margin
+        right_col_x = margin + col_width + margin
+        
+        left_col_y = height - margin - 60
+        right_col_y = height - margin - 60
+        
+        for i, q in enumerate(questions):
+            # Alternate between left and right column
+            if i % 2 == 0:
+                current_x = left_col_x
+                current_y = left_col_y
+            else:
+                current_x = right_col_x
+                current_y = right_col_y
+            
+            # Check if we need a new page for this column
+            if current_y < margin + 50:
+                c.showPage()
+                c.setFont("Helvetica", font_size)
+                if i % 2 == 0:
+                    left_col_y = height - margin - 60
+                    current_y = left_col_y
+                else:
+                    right_col_y = height - margin - 60
+                    current_y = right_col_y
+            
+            # Draw question
+            c.setFont("Helvetica-Bold", font_size)
+            numbering = self.settings.get('numbering_style', '1, 2, 3...')
+            if numbering == "1), 2), 3)...":
+                q_prefix = f"{q['id']})"
+            elif numbering == "(1), (2), (3)...":
+                q_prefix = f"({q['id']})"
+            elif numbering == "A, B, C...":
+                q_prefix = chr(64 + min(q['id'], 26))
+            else:
+                q_prefix = f"Q{q['id']}"
+            
+            q_text_display = q['text'][:40] + "..." if len(q['text']) > 40 else q['text']
+            
+            if self.settings.get('show_points', True):
+                text_line = f"{q_prefix}. {q_text_display} ({q['score']} pts)"
+            else:
+                text_line = f"{q_prefix}. {q_text_display}"
+            
+            c.drawString(current_x, current_y, text_line)
+            current_y -= line_height
+            
+            c.setFont("Helvetica", font_size - 1)
+            
+            # Draw question type specific content
+            if q["type"] == 0:  # Multiple Choice
+                for j, choice in enumerate(q.get("choices", [])[:3], 1):
+                    choice_display = choice[:30] + "..." if len(choice) > 30 else choice
+                    c.drawString(current_x + 5, current_y, f"   {chr(96+j)}. {choice_display}")
+                    current_y -= line_height - 4
+                if self.settings.get('show_answer_lines', True):
+                    current_y -= line_height - 4
+                    c.drawString(current_x, current_y, f"Answer: ___")
+                    
+            elif q["type"] == 1:  # True/False
+                c.drawString(current_x, current_y, "( ) True   ( ) False")
+                
+            elif q["type"] == 2:  # Fill in Blank
+                c.drawString(current_x, current_y, "______")
+                
+            elif q["type"] == 3:  # Short Answer
+                if self.settings.get('show_answer_lines', True):
+                    c.drawString(current_x, current_y, "Answer: _________")
+                    
+            elif q["type"] == 4:  # Essay
+                c.drawString(current_x, current_y, "[Answer Space]")
+                for _ in range(min(3, self.settings.get('essay_lines', 4))):
+                    current_y -= line_height
+                    c.line(current_x, current_y, current_x + col_width - 20, current_y)
+            
+            # Update column Y position
+            if i % 2 == 0:
+                left_col_y = current_y - line_height
+            else:
+                right_col_y = current_y - line_height
+        
+        return min(left_col_y, right_col_y) if questions else height - margin - 60
+
     def _generate_pdf_to_file(self, file_path, is_preview=False):
         exam_title = self.settings.get('exam_title', 'Untitled Exam') or "Untitled Exam"
         exam_date = self.settings.get('exam_date', '') or datetime.now().strftime("%B %d, %Y")
@@ -1076,9 +1246,7 @@ class GeneratorApp(QMainWindow):
         c = canvas.Canvas(file_path, pagesize=page_size)
         width, height = page_size
         
-        y = height - margin
-        
-        # Title
+        # Header section (same for both layouts)
         c.setFont("Helvetica-Bold", title_font_size)
         c.drawCentredString(width/2, height - 30, exam_title)
         c.setFont("Helvetica", 10)
@@ -1090,16 +1258,16 @@ class GeneratorApp(QMainWindow):
         instruction = self.settings.get('exam_instruction', '')
         if instruction:
             c.drawString(margin, height - 70, f"Instruction: {instruction[:80]}")
-            y = height - 100
+            start_y = height - 100
         else:
-            y = height - 90
+            start_y = height - 90
         
-        # Student info section
+        # Student info section (only for final PDF, not preview)
         if not is_preview:
-            y = self._draw_student_info(c, width, height, margin, y)
-            y -= 30
+            start_y = self._draw_student_info(c, width, height, margin, start_y)
+            start_y -= 30
         
-        # QR Code
+        # QR Code (only for final PDF)
         if not is_preview and self.settings.get('show_qr', True):
             qr_data = json.dumps({
                 "exam": exam_title,
@@ -1111,21 +1279,28 @@ class GeneratorApp(QMainWindow):
             c.drawImage(qr_path, width - 80, height - 110, width=60, height=60)
             if os.path.exists(qr_path):
                 os.remove(qr_path)
-
-        c.line(margin, y, width - margin, y)
-        y -= 20
         
-        # Questions
-        for q in self.questions:
-            if y < margin + 100:
-                c.showPage()
-                y = height - margin
-                c.setFont("Helvetica", font_size)
-            
-            y = self._draw_question_standard(c, q, margin, y, width, line_height)
-            y -= line_height * 2
-            c.line(margin, y + 10, width - margin, y + 10)
-
+        c.line(margin, start_y, width - margin, start_y)
+        start_y -= 20
+        
+        # Choose layout based on setting
+        if layout_style == "Two Column":
+            remaining_y = self._draw_question_two_column(
+                c, self.questions, margin, width, height, line_height, font_size
+            )
+        else:
+            # Standard layout
+            y = start_y
+            for q in self.questions:
+                if y < margin + 100:
+                    c.showPage()
+                    y = height - margin
+                    c.setFont("Helvetica", font_size)
+                
+                y = self._draw_question_standard(c, q, margin, y, width, line_height)
+                y -= line_height * 2
+                c.line(margin, y + 10, width - margin, y + 10)
+        
         c.save()
 
     def on_type_changed(self, index):
