@@ -1521,8 +1521,22 @@ class GeneratorApp(QMainWindow):
         """)
         btn_answer.clicked.connect(self.export_answer_sheet)
 
+        btn_answer_key = QPushButton("🔑 Export Answer Key")
+        btn_answer_key.setStyleSheet("""
+            QPushButton {
+                background-color: #ffc107;
+                color: #212529;
+                border-radius: 8px;
+                padding: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #e0a800; }
+        """)
+        btn_answer_key.clicked.connect(self.export_answer_key_with_positions)
+
         button_layout.addWidget(btn_pdf)
         button_layout.addWidget(btn_answer)
+        button_layout.addWidget(btn_answer_key)  # 추가
 
         right_layout.addWidget(self.pdf_preview, 1)  # stretch factor를 1로 설정하여 최대한 확장
         right_layout.addWidget(button_container)
@@ -2937,6 +2951,405 @@ class GeneratorApp(QMainWindow):
 
         c.save()
         QMessageBox.information(self, "Success", f"Answer Sheet PDF has been created.\n{file_path}")
+    
+    def export_answer_key_with_positions(self):
+        """정답 키와 문제 위치 정보를 JSON 파일로 내보내기"""
+        if not self.questions:
+            QMessageBox.warning(self, "Notice", "No questions to export.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save Answer Key with Positions", 
+            "", 
+            "JSON Files (*.json)"
+        )
+        if not file_path:
+            return
+        
+        try:
+            # PDF 생성하여 위치 정보 수집
+            temp_dir = tempfile.gettempdir()
+            temp_pdf = os.path.join(temp_dir, f"temp_positions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+            
+            # 위치 정보를 저장할 리스트
+            position_data = []
+            
+            # PDF 생성하면서 위치 정보 수집
+            self._generate_pdf_with_positions(temp_pdf, position_data)
+            
+            # 정답 정보 구성
+            answer_key = {
+                "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
+                "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
+                "total_questions": len(self.questions),
+                "total_points": sum(q.get('score', 0) for q in self.questions),
+                "generated_at": datetime.now().isoformat(),
+                "answers": []
+            }
+            
+            for i, q in enumerate(self.questions):
+                q_info = {
+                    "question_id": q['id'],
+                    "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
+                    "score": q.get('score', 5),
+                    "answer": self._get_answer_text(q),
+                    "expected_answer": self._get_expected_answer(q),
+                    "position": position_data[i] if i < len(position_data) else None
+                }
+                answer_key["answers"].append(q_info)
+            
+            # JSON 파일 저장
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(answer_key, f, ensure_ascii=False, indent=2)
+            
+            # 임시 PDF 삭제
+            if os.path.exists(temp_pdf):
+                os.remove(temp_pdf)
+            
+            QMessageBox.information(
+                self, 
+                "Success", 
+                f"Answer key with positions has been saved.\n{file_path}\n\n"
+                f"Total: {len(self.questions)} questions, {answer_key['total_points']} points"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export answer key: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def _get_answer_text(self, q):
+        """문제의 정답 텍스트 반환"""
+        qtype = q['type']
+        
+        if qtype == 0:  # Multiple Choice
+            answer = q.get('answer', '')
+            # 선택지에서 정답 매칭
+            choices = q.get('choices', [])
+            if answer and choices:
+                for i, choice in enumerate(choices):
+                    if answer.lower() in choice.lower() or chr(65+i) == answer.upper():
+                        return f"{chr(65+i)}. {choice}"
+            return answer or "Not specified"
+        
+        elif qtype == 1:  # True/False
+            answer = q.get('answer', '')
+            return "True" if answer.lower() in ['true', 't', 'o'] else "False"
+        
+        elif qtype == 2:  # Fill in Blank
+            blanks = q.get('blanks', [])
+            answer = q.get('answer', '')
+            if blanks:
+                return ", ".join(blanks)
+            return answer or "Not specified"
+        
+        elif qtype == 3:  # Short Answer
+            return q.get('answer', 'Not specified')
+        
+        elif qtype == 4:  # Essay
+            return "Essay - Manual grading required"
+        
+        elif qtype == 5:  # Matching
+            pairs = q.get('matching_pairs', [])
+            if pairs:
+                matches = [f"{left} → {right}" for left, right in pairs]
+                return "; ".join(matches)
+            return q.get('answer', 'Not specified')
+        
+        elif qtype == 6:  # Ordering
+            items = q.get('ordering_items', [])
+            if items:
+                return " → ".join(items)
+            return q.get('answer', 'Not specified')
+        
+        elif qtype == 7:  # Code
+            code = q.get('code_template', '')
+            if code:
+                return f"Expected output/implementation:\n{code[:200]}"
+            return q.get('answer', 'Manual grading required')
+        
+        elif qtype == 8:  # Calculation
+            formula = q.get('formula', '')
+            if formula:
+                return f"Formula: {formula}\nAnswer: {q.get('answer', 'Not specified')}"
+            return q.get('answer', 'Not specified')
+        
+        else:
+            return q.get('answer', 'Not specified')
+
+    def _get_expected_answer(self, q):
+        """채점용 간단한 정답 문자열 반환"""
+        qtype = q['type']
+        
+        if qtype == 0:  # Multiple Choice
+            answer = q.get('answer', '')
+            choices = q.get('choices', [])
+            if answer and choices:
+                for i, choice in enumerate(choices):
+                    if answer.lower() in choice.lower():
+                        return chr(65+i)
+                    if answer.upper() == chr(65+i):
+                        return answer.upper()
+            return answer.upper() if answer else "?"
+        
+        elif qtype == 1:  # True/False
+            answer = q.get('answer', '')
+            return "T" if answer.lower() in ['true', 't', 'o'] else "F"
+        
+        elif qtype == 2:  # Fill in Blank
+            blanks = q.get('blanks', [])
+            return ", ".join(blanks) if blanks else q.get('answer', '')
+        
+        elif qtype == 3:  # Short Answer
+            return q.get('answer', '')
+        
+        elif qtype == 4:  # Essay
+            return "[ESSAY]"
+        
+        elif qtype == 5:  # Matching
+            pairs = q.get('matching_pairs', [])
+            if pairs:
+                # 수정: i 변수 대신 enumerate 사용
+                match_list = []
+                for idx, (left, right) in enumerate(pairs):
+                    # 정답 형식: "1-A, 2-B, 3-C"
+                    match_list.append(f"{idx+1}-{chr(65+idx) if idx < 26 else idx}")
+                return "; ".join(match_list)
+            return q.get('answer', '')
+        
+        elif qtype == 6:  # Ordering
+            return " > ".join([str(i+1) for i in range(len(q.get('ordering_items', [])))])
+        
+        else:
+            return q.get('answer', '')
+
+    def _generate_pdf_with_positions(self, file_path, position_data):
+        """PDF 생성하면서 문제 위치 정보 수집"""
+        exam_title = self.settings.get('exam_title', 'Untitled Exam') or "Untitled Exam"
+        exam_date = self.settings.get('exam_date', '') or datetime.now().strftime("%B %d, %Y")
+        
+        page_size = PAGE_SIZES.get(self.settings.get('page_size', 'A4'), A4)
+        
+        c = canvas.Canvas(file_path, pagesize=page_size)
+        width, height = page_size
+        
+        # 위치 추적을 위한 더미 캔버스 (좌표 기록용)
+        class PositionTracker:
+            def __init__(self):
+                self.positions = []
+                self.current_page = 0
+                self.current_x = 0
+                self.current_y = 0
+            
+            def add_position(self, q_id, x, y, page):
+                self.positions.append({
+                    'question_id': q_id,
+                    'page': page,
+                    'x': x,
+                    'y': y
+                })
+        
+        tracker = PositionTracker()
+        
+        margin_top = 25 * mm
+        margin_bottom = 15 * mm
+        margin_left = 20 * mm
+        margin_right = 20 * mm
+        
+        available_width = width - margin_left - margin_right
+        
+        line_height = int(self.settings.get('line_spacing', 1.5) * self.settings.get('font_size', 11))
+        layout_style = self.settings.get('layout_style', 'Two Column')
+        font_size = self.settings.get('font_size', 11)
+        title_font_size = self.settings.get('title_font_size', 18)
+        
+        # ===== 헤더 영역 =====
+        current_y = height - margin_top
+        current_page = 1
+        
+        # 시험 제목
+        c.setFont("Helvetica-Bold", title_font_size)
+        c.drawCentredString(width/2, current_y, exam_title)
+        current_y -= 22
+        
+        # 날짜 및 QR 코드, 총점 표시
+        c.setFont("Helvetica", 10)
+        total_points = sum(q.get('score', 0) for q in self.questions)
+        
+        if self.settings.get('show_qr', True):
+            qr_data = json.dumps({
+                "exam": exam_title,
+                "date": exam_date,
+                "questions": len(self.questions),
+                "total_score": total_points
+            })
+            qr_path = generate_qr(qr_data, f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            c.drawImage(qr_path, margin_left, current_y - 15, width=35, height=35)
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
+        else:
+            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
+        
+        current_y -= 18
+        
+        # 시험지 설명
+        instruction = self.settings.get('exam_instruction', '')
+        if instruction:
+            c.setFont("Helvetica-Oblique", 9)
+            instruction_lines = self._wrap_text(instruction, available_width - 20, 9)
+            for line in instruction_lines:
+                c.drawString(margin_left, current_y, f"※ {line}")
+                current_y -= line_height - 4
+            current_y -= 8
+        
+        # 구분선
+        c.line(margin_left, current_y, width - margin_right, current_y)
+        current_y -= 15
+        current_y -= 15
+        
+        # ===== 질문 영역 (위치 정보 수집 포함) =====
+        if layout_style == "Two Column":
+            self._draw_question_two_column_with_positions(
+                c, self.questions, margin_left, margin_right, 
+                width, height, line_height, font_size, 
+                available_width, current_y, tracker
+            )
+        else:
+            self._draw_question_standard_with_positions(
+                c, self.questions, margin_left, margin_right, width, height,
+                line_height, font_size, available_width, current_y, tracker, 40
+            )
+        
+        c.save()
+        
+        # 위치 정보 저장
+        for idx, pos in enumerate(tracker.positions):
+            position_data.append(pos)
+
+    def _draw_question_two_column_with_positions(self, c, questions, margin_left, margin_right, 
+                                                width, height, line_height, font_size, 
+                                                available_width, start_y, tracker):
+        """Two column 레이아웃으로 질문 표시 (위치 정보 수집)"""
+        col_gap = 15
+        col_width = (available_width - col_gap) // 2
+        
+        left_col_x = margin_left
+        right_col_x = margin_left + col_width + col_gap
+        
+        page_bottom_margin = 25
+        current_page = 1
+        
+        current_y = start_y
+        q_index = 0
+        total_questions = len(questions)
+        
+        while q_index < total_questions:
+            if q_index > 0:
+                c.showPage()
+                current_page += 1
+                current_y = height - 35
+            
+            # 왼쪽 컬럼
+            left_y = current_y
+            left_q_indices = []
+            
+            temp_index = q_index
+            while temp_index < total_questions:
+                q = questions[temp_index]
+                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
+                
+                if left_y - q_height > page_bottom_margin:
+                    left_q_indices.append(temp_index)
+                    left_y -= q_height
+                    temp_index += 1
+                else:
+                    break
+            
+            # 오른쪽 컬럼
+            right_q_indices = []
+            right_y = current_y
+            
+            temp_index2 = temp_index
+            while temp_index2 < total_questions:
+                q = questions[temp_index2]
+                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
+                
+                if right_y - q_height > page_bottom_margin:
+                    right_q_indices.append(temp_index2)
+                    right_y -= q_height
+                    temp_index2 += 1
+                else:
+                    break
+            
+            # 왼쪽 컬럼 문제 그리기 및 위치 기록
+            if left_q_indices:
+                y_pos = current_y
+                for idx in left_q_indices:
+                    q = questions[idx]
+                    # 위치 기록
+                    tracker.add_position(q['id'], left_col_x, y_pos, current_page)
+                    y_pos = self._draw_single_question_two_col_v3(
+                        c, q, left_col_x, y_pos, line_height, font_size, col_width, idx + 1
+                    )
+                    y_pos -= 25
+                    if idx != left_q_indices[-1]:
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.setLineWidth(0.5)
+                        c.line(left_col_x, y_pos + 12, left_col_x + col_width, y_pos + 12)
+                        c.setStrokeColor(black)
+            
+            # 오른쪽 컬럼 문제 그리기 및 위치 기록
+            if right_q_indices:
+                y_pos = current_y
+                for idx in right_q_indices:
+                    q = questions[idx]
+                    # 위치 기록
+                    tracker.add_position(q['id'], right_col_x, y_pos, current_page)
+                    y_pos = self._draw_single_question_two_col_v3(
+                        c, q, right_col_x, y_pos, line_height, font_size, col_width, idx + 1
+                    )
+                    y_pos -= 25
+                    if idx != right_q_indices[-1]:
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.setLineWidth(0.5)
+                        c.line(right_col_x, y_pos + 12, right_col_x + col_width, y_pos + 12)
+                        c.setStrokeColor(black)
+            
+            # 다음 페이지로 이동
+            if right_q_indices:
+                q_index = right_q_indices[-1] + 1
+            elif left_q_indices:
+                q_index = left_q_indices[-1] + 1
+            else:
+                q_index = temp_index if temp_index > q_index else q_index + 1
+
+    def _draw_question_standard_with_positions(self, c, questions, margin_left, margin_right, width, height,
+                                            line_height, font_size, available_width, start_y, tracker, page_bottom_margin=40):
+        """표준 레이아웃으로 질문 표시 (위치 정보 수집)"""
+        current_y = start_y
+        current_page = 1
+        
+        for q in questions:
+            needed_height = self._estimate_question_height(q, line_height, font_size, available_width)
+            
+            if current_y - needed_height < page_bottom_margin:
+                c.showPage()
+                current_page += 1
+                current_y = height - 80
+                c.setFont("Helvetica", font_size)
+            
+            # 위치 기록
+            tracker.add_position(q['id'], margin_left, current_y, current_page)
+            
+            current_y = self._draw_single_question_standard(
+                c, q, margin_left, current_y, line_height, font_size, available_width
+            )
+            
+            current_y -= line_height
+            c.line(margin_left, current_y + 10, width - margin_right, current_y + 10)
+            current_y -= 10
 
 
 if __name__ == "__main__":
