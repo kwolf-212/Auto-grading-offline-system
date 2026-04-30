@@ -1,4 +1,4 @@
-# exam_generator_app.py (설정을 오른쪽으로 이동하고 다이얼로그로 변경)
+# exam_generator_app.py (Updated with new question formats)
 
 import sys
 import json
@@ -40,15 +40,12 @@ PAGE_SIZES = {
 }
 
 # ---------------- CONSTANTS ----------------
-# 페이지 여백 상수 (mm 단위)
-MARGIN_TOP_COMPACT = 30      # 상단 여백
-MARGIN_BOTTOM_COMPACT = 30   # 하단 여백  
-MARGIN_LEFT_COMPACT = 20     # 좌측 여백
-MARGIN_RIGHT_COMPACT = 20    # 우측 여백
-
-# Two Column 설정
-COLUMN_GAP_COMPACT = 15      # 컬럼 간 간격
-PAGE_BOTTOM_MARGIN = 0      # 페이지 하단 여유 공간
+MARGIN_TOP_COMPACT = 30
+MARGIN_BOTTOM_COMPACT = 30  
+MARGIN_LEFT_COMPACT = 20
+MARGIN_RIGHT_COMPACT = 20
+COLUMN_GAP_COMPACT = 15
+PAGE_BOTTOM_MARGIN = 0
 
 # ---------------- QR ---------------- 
 def generate_qr(data, filename="exam_qr.png"):
@@ -66,8 +63,6 @@ def generate_qr(data, filename="exam_qr.png"):
 
 # ---------------- SETTINGS DIALOG ----------------
 class ExamSettingsDialog(QDialog):
-    """Dialog for exam settings (page setup, student info, exam info)"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("📐 Exam Settings")
@@ -77,7 +72,6 @@ class ExamSettingsDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Tab widget for organized settings
         tab_widget = QTabWidget()
         
         # Tab 1: Exam Information
@@ -146,7 +140,6 @@ class ExamSettingsDialog(QDialog):
         self.essay_lines.setValue(4)
         page_layout.addRow("Essay Lines:", self.essay_lines)
 
-        # 여백 프리셋 선택 추가
         preset_layout = QHBoxLayout()
         preset_layout.addWidget(QLabel("Margin Preset:"))
         self.margin_preset = QComboBox()
@@ -201,10 +194,6 @@ class ExamSettingsDialog(QDialog):
         self.show_points.setChecked(True)
         advanced_layout.addRow("", self.show_points)
         
-        self.show_answer_lines = QCheckBox("Show Answer Lines")
-        self.show_answer_lines.setChecked(True)
-        advanced_layout.addRow("", self.show_answer_lines)
-        
         self.numbering_style = QComboBox()
         self.numbering_style.addItems(["1, 2, 3...", "1), 2), 3)...", "(1), (2), (3)...", "A, B, C..."])
         advanced_layout.addRow("Numbering Style:", self.numbering_style)
@@ -213,7 +202,6 @@ class ExamSettingsDialog(QDialog):
         
         layout.addWidget(tab_widget)
         
-        # Buttons
         btn_layout = QHBoxLayout()
         self.save_btn = QPushButton("💾 Save Settings")
         self.save_btn.setStyleSheet("background-color: #28a745;")
@@ -228,7 +216,6 @@ class ExamSettingsDialog(QDialog):
         self.setLayout(layout)
     
     def on_margin_preset_changed(self, preset):
-        """여백 프리셋 변경 시"""
         if preset == "Compact":
             self.margin_spin.setValue(30)
         elif preset == "Normal":
@@ -259,7 +246,6 @@ class ExamSettingsDialog(QDialog):
             'student_date': self.student_date.text(),
             'additional_info': self.additional_info.text(),
             'show_points': self.show_points.isChecked(),
-            'show_answer_lines': self.show_answer_lines.isChecked(),
             'numbering_style': self.numbering_style.currentText()
         }
     
@@ -292,17 +278,14 @@ class ExamSettingsDialog(QDialog):
         self.additional_info.setText(settings.get('additional_info', ''))
         
         self.show_points.setChecked(settings.get('show_points', True))
-        self.show_answer_lines.setChecked(settings.get('show_answer_lines', True))
         
         idx = self.numbering_style.findText(settings.get('numbering_style', '1, 2, 3...'))
         if idx >= 0:
             self.numbering_style.setCurrentIndex(idx)
 
 
-# ---------------- SETTINGS SUMMARY WIDGET (간단한 한 줄 형태) ----------------
+# ---------------- SETTINGS SUMMARY WIDGET ----------------
 class SettingsSummaryWidget(QWidget):
-    """간단한 한 줄 설정 요약 위젯"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
@@ -313,7 +296,6 @@ class SettingsSummaryWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         
-        # 설정 정보 라벨
         self.settings_label = QLabel()
         self.settings_label.setStyleSheet("""
             QLabel {
@@ -326,9 +308,8 @@ class SettingsSummaryWidget(QWidget):
             }
         """)
         
-        # Edit 버튼 - Preview 도구 모음 버튼과 동일한 스타일 적용
         self.edit_btn = QPushButton("⚙️")
-        self.edit_btn.setToolTip("시험 설정 편집")
+        self.edit_btn.setToolTip("Edit Exam Settings")
         self.edit_btn.setStyleSheet("""
             QPushButton {
                 font-size: 18px;
@@ -350,10 +331,6 @@ class SettingsSummaryWidget(QWidget):
             QPushButton:pressed {
                 background-color: #2a2a2a;
             }
-            QPushButton:disabled {
-                color: #666;
-                background-color: #2a2a2a;
-            }
         """)
         self.edit_btn.setCursor(Qt.PointingHandCursor)
         
@@ -373,10 +350,8 @@ class SettingsSummaryWidget(QWidget):
         self.settings_label.setText(summary_text)
 
 
-# ---------------- PDF PREVIEW LABEL (사각형 표시 및 휠 이벤트 지원) ----------------
+# ---------------- PDF PREVIEW LABEL ----------------
 class PDFPreviewLabel(QLabel):
-    """PDF 미리보기 라벨 - 실제 PDF 영역을 사각형으로 표시하고 마우스 휠 지원"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
@@ -388,62 +363,43 @@ class PDFPreviewLabel(QLabel):
         """)
         self.setMinimumHeight(550)
         self.setScaledContents(False)
-        
-        # PDF 영역 관련 변수
-        self.pdf_rect = None  # 실제 PDF가 그려지는 영역 (QRect)
+        self.pdf_rect = None
         self.parent_widget = parent
-        
-        # 마우스 드래그로 스크롤
         self.drag_start_pos = None
         self.drag_start_scroll = None
         
     def set_pdf_rect(self, rect):
-        """PDF 영역 사각형 설정"""
         self.pdf_rect = rect
-        self.update()  # 다시 그리기
+        self.update()
         
     def paintEvent(self, event):
-        """페인트 이벤트 - PDF 영역 주변에 사각형 표시"""
         super().paintEvent(event)
-        
         if self.pdf_rect and not self.pdf_rect.isNull():
             painter = QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
-            
-            # 그림자 효과를 위한 반투명 사각형
             shadow_rect = QRect(self.pdf_rect.x() + 2, self.pdf_rect.y() + 2, 
                                 self.pdf_rect.width(), self.pdf_rect.height())
             painter.fillRect(shadow_rect, QColor(0, 0, 0, 30))
-            
-            # PDF 영역 테두리 (파란색, 두꺼운 선)
             pen = QPen(QColor(33, 150, 243), 3)
             painter.setPen(pen)
             painter.drawRect(self.pdf_rect)
-            
-            # 모서리 둥글게 효과
             pen2 = QPen(QColor(33, 150, 243, 100), 1)
             painter.setPen(pen2)
             painter.drawRect(self.pdf_rect.adjusted(1, 1, -1, -1))
-            
             painter.end()
     
     def wheelEvent(self, event):
-        """마우스 휠로 페이지 전환"""
-        # Ctrl 키와 함께 휠을 돌리면 확대/축소 대신 페이지 전환
         if event.modifiers() & Qt.ControlModifier:
-            # Ctrl+휠: 확대/축소는 상위 위젯에 위임
             super().wheelEvent(event)
         else:
-            # 일반 휠: 페이지 전환 이벤트 발생
             delta = event.angleDelta().y()
             if delta > 0:
-                # 휠 업: 이전 페이지
                 self.parent().prev_page() if hasattr(self.parent(), 'prev_page') else None
             else:
-                # 휠 다운: 다음 페이지
                 self.parent().next_page() if hasattr(self.parent(), 'next_page') else None
 
-# ---------------- PDF PREVIEW WIDGET (미리보기 영역 확장) ---------------- 
+
+# ---------------- PDF PREVIEW WIDGET ----------------
 class PDFPreviewWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -451,8 +407,9 @@ class PDFPreviewWidget(QWidget):
         self.current_page = 0
         self.total_pages = 0
         self.zoom_factor = 1.0
-        self.fit_mode = "none"  # none, width, height
-        self.original_pixmap = None  # 원본 픽스맵 저장
+        self.fit_mode = "none"
+        self.original_pixmap = None
+        self.saved_page = 0  # 페이지 저장을 위한 변수 추가
         self.init_ui()
         self.last_scroll_pos = None
         
@@ -461,7 +418,6 @@ class PDFPreviewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
         
-        # 상단 툴바
         toolbar_widget = QWidget()
         toolbar_widget.setStyleSheet("""
             QWidget {
@@ -474,7 +430,6 @@ class PDFPreviewWidget(QWidget):
         toolbar_layout.setContentsMargins(10, 5, 10, 5)
         toolbar_layout.setSpacing(8)
         
-        # 버튼 공통 스타일 (아이콘 버튼용)
         icon_button_style = """
             QPushButton {
                 font-size: 18px;
@@ -502,7 +457,6 @@ class PDFPreviewWidget(QWidget):
             }
         """
         
-        # 작은 버튼 스타일 (숫자 버튼용)
         small_button_style = """
             QPushButton {
                 font-size: 16px;
@@ -524,15 +478,7 @@ class PDFPreviewWidget(QWidget):
             QPushButton:pressed {
                 background-color: #2a2a2a;
             }
-            QPushButton:disabled {
-                color: #666;
-                background-color: #2a2a2a;
-            }
         """
-        
-        # 줌 표시
-        # self.zoom_label = QLabel("🔍")
-        # self.zoom_label.setStyleSheet("font-size: 16px; color: #ffffff;")
         
         self.zoom_value = QLabel("100%")
         self.zoom_value.setFixedWidth(55)
@@ -547,19 +493,18 @@ class PDFPreviewWidget(QWidget):
             padding: 5px;
         """)
         
-        # 줌 버튼
         self.zoom_out_btn = QPushButton("🔍−")
-        self.zoom_out_btn.setToolTip("축소 (Ctrl+Scroll Down)")
+        self.zoom_out_btn.setToolTip("Zoom Out (Ctrl+Scroll Down)")
         self.zoom_out_btn.setStyleSheet(small_button_style)
         self.zoom_out_btn.clicked.connect(self.zoom_out)
         
         self.zoom_in_btn = QPushButton("🔍+")
-        self.zoom_in_btn.setToolTip("확대 (Ctrl+Scroll Up)")
+        self.zoom_in_btn.setToolTip("Zoom In (Ctrl+Scroll Up)")
         self.zoom_in_btn.setStyleSheet(small_button_style)
         self.zoom_in_btn.clicked.connect(self.zoom_in)
         
         self.reset_zoom_btn = QPushButton("↺")
-        self.reset_zoom_btn.setToolTip("원래 크기로 (100%)")
+        self.reset_zoom_btn.setToolTip("Reset to 100%")
         self.reset_zoom_btn.setStyleSheet("""
             QPushButton {
                 font-size: 18px;
@@ -578,45 +523,38 @@ class PDFPreviewWidget(QWidget):
                 background-color: #4a4a4a;
                 border: 1px solid #007acc;
             }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
         """)
         self.reset_zoom_btn.clicked.connect(self.reset_zoom)
         
-        # 구분선
         separator1 = QFrame()
         separator1.setFrameShape(QFrame.VLine)
         separator1.setFrameShadow(QFrame.Sunken)
         separator1.setFixedSize(2, 30)
         separator1.setStyleSheet("background-color: #555;")
         
-        # Fit 버튼 (아이콘으로 변경)
         self.fit_width_btn = QPushButton("⬌")
-        self.fit_width_btn.setToolTip("너비에 맞추기 (Ctrl+W)")
+        self.fit_width_btn.setToolTip("Fit to Width")
         self.fit_width_btn.setStyleSheet(icon_button_style)
         self.fit_width_btn.clicked.connect(self.fit_to_width)
         
         self.fit_height_btn = QPushButton("⬍")
-        self.fit_height_btn.setToolTip("높이에 맞추기 (Ctrl+H)")
+        self.fit_height_btn.setToolTip("Fit to Height")
         self.fit_height_btn.setStyleSheet(icon_button_style)
         self.fit_height_btn.clicked.connect(self.fit_to_height)
         
         self.fit_page_btn = QPushButton("⊞")
-        self.fit_page_btn.setToolTip("페이지 전체 맞추기 (Ctrl+F)")
+        self.fit_page_btn.setToolTip("Fit to Page")
         self.fit_page_btn.setStyleSheet(icon_button_style)
         self.fit_page_btn.clicked.connect(self.fit_to_page)
         
-        # 구분선
         separator2 = QFrame()
         separator2.setFrameShape(QFrame.VLine)
         separator2.setFrameShadow(QFrame.Sunken)
         separator2.setFixedSize(2, 30)
         separator2.setStyleSheet("background-color: #555;")
         
-        # 페이지 네비게이션 버튼 (아이콘으로 변경)
         self.prev_btn = QPushButton("◀")
-        self.prev_btn.setToolTip("이전 페이지 (←)")
+        self.prev_btn.setToolTip("Previous Page (←)")
         self.prev_btn.setStyleSheet("""
             QPushButton {
                 font-size: 18px;
@@ -634,9 +572,6 @@ class PDFPreviewWidget(QWidget):
             QPushButton:hover {
                 background-color: #4a4a4a;
                 border: 1px solid #007acc;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
             }
             QPushButton:disabled {
                 color: #666;
@@ -659,7 +594,7 @@ class PDFPreviewWidget(QWidget):
         """)
         
         self.next_btn = QPushButton("▶")
-        self.next_btn.setToolTip("다음 페이지 (→)")
+        self.next_btn.setToolTip("Next Page (→)")
         self.next_btn.setStyleSheet("""
             QPushButton {
                 font-size: 18px;
@@ -678,9 +613,6 @@ class PDFPreviewWidget(QWidget):
                 background-color: #4a4a4a;
                 border: 1px solid #007acc;
             }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
             QPushButton:disabled {
                 color: #666;
                 background-color: #2a2a2a;
@@ -688,9 +620,8 @@ class PDFPreviewWidget(QWidget):
         """)
         self.next_btn.clicked.connect(self.next_page)
                 
-        # 새로고침 버튼 (아이콘으로 변경)
         self.refresh_btn = QPushButton("⟳")
-        self.refresh_btn.setToolTip("미리보기 새로고침 (Ctrl+R)")
+        self.refresh_btn.setToolTip("Refresh Preview")
         self.refresh_btn.setStyleSheet("""
             QPushButton {
                 font-size: 18px;
@@ -708,14 +639,9 @@ class PDFPreviewWidget(QWidget):
             QPushButton:hover {
                 background-color: #005a9e;
             }
-            QPushButton:pressed {
-                background-color: #004578;
-            }
         """)
         self.refresh_btn.clicked.connect(self.refresh_preview)
         
-        # 툴바에 위젯 추가
-        # toolbar_layout.addWidget(self.zoom_label)
         toolbar_layout.addWidget(self.zoom_out_btn)
         toolbar_layout.addWidget(self.zoom_value)
         toolbar_layout.addWidget(self.zoom_in_btn)
@@ -731,7 +657,6 @@ class PDFPreviewWidget(QWidget):
         toolbar_layout.addStretch()
         toolbar_layout.addWidget(self.refresh_btn)
         
-        # 미리보기 영역 (스크롤 가능)
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setAlignment(Qt.AlignCenter)
@@ -753,8 +678,7 @@ class PDFPreviewWidget(QWidget):
         """)
         self.scroll_area.setWidget(self.preview_label)
         
-        # 상태 표시줄
-        self.status_label = QLabel("준비됨")
+        self.status_label = QLabel("Ready")
         self.status_label.setStyleSheet("color: #cccccc; padding: 5px; font-size: 11px; background-color: #1e1e1e; border-radius: 4px;")
         
         layout.addWidget(toolbar_widget)
@@ -763,17 +687,13 @@ class PDFPreviewWidget(QWidget):
         
         self.setLayout(layout)
         self.update_navigation_buttons()
-        
-        # 마우스 트래킹 활성화
         self.preview_label.setMouseTracking(True)
 
     def refresh_preview(self):
-        """미리보기 새로고침"""
         if hasattr(self.parent(), 'generate_live_preview'):
             self.parent().generate_live_preview() 
     
     def zoom_in(self):
-        """확대"""
         current = int(self.zoom_value.text().rstrip('%'))
         new_value = min(300, current + 10)
         self.zoom_value.setText(f"{new_value}%")
@@ -782,7 +702,6 @@ class PDFPreviewWidget(QWidget):
         self.update_preview()
         
     def zoom_out(self):
-        """축소"""
         current = int(self.zoom_value.text().rstrip('%'))
         new_value = max(30, current - 10)
         self.zoom_value.setText(f"{new_value}%")
@@ -791,18 +710,15 @@ class PDFPreviewWidget(QWidget):
         self.update_preview()
         
     def reset_zoom(self):
-        """줌 리셋 (100%)"""
         self.zoom_value.setText("100%")
         self.zoom_factor = 1.0
         self.fit_mode = "none"
         self.update_preview()
         
     def fit_to_width(self):
-        """너비에 맞추기"""
         if not self.original_pixmap:
             return
         self.fit_mode = "width"
-        # 스크롤 영역의 가용 너비 계산
         available_width = self.scroll_area.viewport().width() - 20
         if available_width > 0:
             target_width = available_width
@@ -813,11 +729,9 @@ class PDFPreviewWidget(QWidget):
             self.update_preview()
             
     def fit_to_height(self):
-        """높이에 맞추기"""
         if not self.original_pixmap:
             return
         self.fit_mode = "height"
-        # 스크롤 영역의 가용 높이 계산
         available_height = self.scroll_area.viewport().height() - 20
         if available_height > 0:
             target_height = available_height
@@ -828,11 +742,9 @@ class PDFPreviewWidget(QWidget):
             self.update_preview()
             
     def fit_to_page(self):
-        """페이지 전체에 맞추기"""
         if not self.original_pixmap:
             return
         self.fit_mode = "page"
-        # 너비와 높이 모두 고려하여 더 작은 비율 선택
         available_width = self.scroll_area.viewport().width() - 20
         available_height = self.scroll_area.viewport().height() - 20
         
@@ -847,18 +759,12 @@ class PDFPreviewWidget(QWidget):
             self.update_preview()
             
     def set_preview_image(self, pixmap):
-        """미리보기 이미지 설정"""
         if pixmap and not pixmap.isNull():
             self.original_pixmap = pixmap
-            
-            # zoom_factor 사용 (zoom_slider 대신)
             zoom = self.zoom_factor
-            
-            # 원본 크기 계산
             original_width = pixmap.width()
             original_height = pixmap.height()
             
-            # 줌 적용
             scaled_pixmap = pixmap.scaled(
                 int(original_width * zoom),
                 int(original_height * zoom),
@@ -893,20 +799,16 @@ class PDFPreviewWidget(QWidget):
             self.update_preview()
             
     def wheelEvent(self, event):
-        """마우스 휠 이벤트 - Ctrl 키로 줌, 아니면 스크롤"""
         if event.modifiers() & Qt.ControlModifier:
-            # Ctrl + 휠: 줌 인/아웃
             delta = event.angleDelta().y()
             if delta > 0:
                 self.zoom_in()
             else:
                 self.zoom_out()
         else:
-            # 일반 휠: 스크롤 영역에 이벤트 전달
             QApplication.sendEvent(self.scroll_area.viewport(), event)
             
     def keyPressEvent(self, event):
-        """키보드 단축키"""
         if event.key() == Qt.Key_Left:
             self.prev_page()
         elif event.key() == Qt.Key_Right:
@@ -964,6 +866,9 @@ class PDFPreviewWidget(QWidget):
             self.update_navigation_buttons()
             
             if self.total_pages > 0:
+                # 현재 페이지의 스크롤 위치 저장 (선택사항)
+                current_scroll = self.scroll_area.verticalScrollBar().value()
+
                 page = doc[self.current_page]
                 zoom_matrix = fitz.Matrix(2.0, 2.0)
                 pix = page.get_pixmap(matrix=zoom_matrix, alpha=False)
@@ -974,9 +879,9 @@ class PDFPreviewWidget(QWidget):
                 
                 self.set_preview_image(pixmap)
                 
-                if self.last_scroll_pos is not None:
-                    self.scroll_area.verticalScrollBar().setValue(self.last_scroll_pos)
-                    self.last_scroll_pos = None
+                # 스크롤 위치 복원 (선택사항)
+                if current_scroll > 0:
+                    QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(current_scroll))
             else:
                 self.preview_label.setText("PDF has no pages")
                 
@@ -991,14 +896,23 @@ class PDFPreviewWidget(QWidget):
             
     def load_pdf(self, pdf_path):
         self.current_pdf_path = pdf_path
-        self.current_page = 0
+        # 저장된 페이지가 있으면 그 페이지로 이동, 없으면 0
+        self.current_page = self.saved_page if hasattr(self, 'saved_page') else 0
         self.total_pages = 0
         self.update_preview()
 
+    def save_current_page(self):
+        """현재 페이지 번호를 저장"""
+        self.saved_page = self.current_page
+    
+    def refresh_preview(self):
+        """미리보기 새로고침 시 현재 페이지 유지"""
+        self.save_current_page()  # 현재 페이지 저장
+        if hasattr(self.parent(), 'generate_live_preview'):
+            self.parent().generate_live_preview()
+
 
 class PDFPreviewLabelEnhanced(QLabel):
-    """향상된 PDF 미리보기 라벨 - 마우스 드래그 스크롤 지원"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
@@ -1010,17 +924,13 @@ class PDFPreviewLabelEnhanced(QLabel):
             }
         """)
         self.setMinimumSize(100, 100)
-        
-        # 마우스 드래그로 스크롤
         self.drag_start_pos = None
         self.drag_start_scroll = None
         self.setMouseTracking(True)
         
     def mousePressEvent(self, event):
-        """마우스 버튼 클릭 - 드래그 시작 위치 저장"""
         if event.button() == Qt.LeftButton:
             self.drag_start_pos = event.globalPos()
-            # 부모의 스크롤 영역 찾기
             scroll_area = self.parent()
             while scroll_area and not isinstance(scroll_area, QScrollArea):
                 scroll_area = scroll_area.parent()
@@ -1029,7 +939,6 @@ class PDFPreviewLabelEnhanced(QLabel):
             self.setCursor(Qt.ClosedHandCursor)
             
     def mouseMoveEvent(self, event):
-        """마우스 이동 - 드래그로 스크롤"""
         if event.buttons() & Qt.LeftButton and self.drag_start_pos and self.drag_start_scroll:
             delta = event.globalPos() - self.drag_start_pos
             scroll_area = self.parent()
@@ -1040,18 +949,14 @@ class PDFPreviewLabelEnhanced(QLabel):
                 scroll_area.verticalScrollBar().setValue(self.drag_start_scroll[1] - delta.y())
                 
     def mouseReleaseEvent(self, event):
-        """마우스 버튼 릴리스"""
         self.drag_start_pos = None
         self.drag_start_scroll = None
         self.setCursor(Qt.ArrowCursor)
         
     def wheelEvent(self, event):
-        """마우스 휠 이벤트 - Ctrl 없으면 부모 스크롤 영역으로 전달"""
         if event.modifiers() & Qt.ControlModifier:
-            # Ctrl+휠: 줌 이벤트는 상위 위젯으로
             super().wheelEvent(event)
         else:
-            # 일반 휠: 스크롤 영역으로 전달
             scroll_area = self.parent()
             while scroll_area and not isinstance(scroll_area, QScrollArea):
                 scroll_area = scroll_area.parent()
@@ -1059,7 +964,7 @@ class PDFPreviewLabelEnhanced(QLabel):
                 QApplication.sendEvent(scroll_area.viewport(), event)
 
 
-# ---------------- DATABASE BROWSER DIALOG ---------------- 
+# ---------------- DATABASE BROWSER DIALOG ----------------
 class DatabaseBrowserDialog(QDialog):
     def __init__(self, db: DatabaseManager, parent=None):
         super().__init__(parent)
@@ -1073,7 +978,6 @@ class DatabaseBrowserDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
     
-        # 다이얼로그 자체에 다크 스타일 적용
         self.setStyleSheet("""
             QDialog {
                 background-color: #2d2d2d;
@@ -1259,7 +1163,7 @@ class DatabaseBrowserDialog(QDialog):
         self.accept()
 
 
-# ---------------- QUESTION TYPES ---------------- 
+# ---------------- QUESTION TYPES ----------------
 QUESTION_TYPES = {
     0: {"name": "Multiple Choice", "icon": "🔘", "has_options": True, "has_answer": True},
     1: {"name": "True/False", "icon": "✓✗", "has_options": False, "has_answer": True},
@@ -1274,7 +1178,7 @@ QUESTION_TYPES = {
 }
 
 
-# ---------------- MAIN APP ---------------- 
+# ---------------- MAIN APP ----------------
 class GeneratorApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1301,7 +1205,6 @@ class GeneratorApp(QMainWindow):
             'student_date': '',
             'additional_info': '',
             'show_points': True,
-            'show_answer_lines': True,
             'numbering_style': '1, 2, 3...'
         }
         self.init_ui()
@@ -1371,7 +1274,7 @@ class GeneratorApp(QMainWindow):
         left_layout.addWidget(self.dynamic_container)
 
         self.options_input = QTextEdit()
-        self.options_input.setPlaceholderText("Options (one per line)\nExample:\nA) Option 1\nB) Option 2\nC) Option 3")
+        self.options_input.setPlaceholderText("Options (one per line)\nExample:\nOption 1\nOption 2\nOption 3")
         self.options_input.setMaximumHeight(100)
         self.options_input.textChanged.connect(self.on_content_changed)
 
@@ -1389,7 +1292,7 @@ class GeneratorApp(QMainWindow):
         self.matching_right.textChanged.connect(self.on_content_changed)
 
         self.ordering_input = QTextEdit()
-        self.ordering_input.setPlaceholderText("Items to order (one per line)\nStep 1: ...\nStep 2: ...\nStep 3: ...")
+        self.ordering_input.setPlaceholderText("Items to order (one per line, correct order)\nStep 1: ...\nStep 2: ...\nStep 3: ...")
         self.ordering_input.setMaximumHeight(100)
         self.ordering_input.textChanged.connect(self.on_content_changed)
 
@@ -1443,14 +1346,9 @@ class GeneratorApp(QMainWindow):
 
         self.list_widget = QListWidget()
         self.list_widget.setDragDropMode(QAbstractItemView.InternalMove)
-        self.list_widget.setAlternatingRowColors(True)  # 이미 True로 설정되어 있음
+        self.list_widget.setAlternatingRowColors(True)
         self.list_widget.model().rowsMoved.connect(self.on_list_reordered)
 
-        # list_font = QFont()
-        # list_font.setPointSize(12)
-        # self.list_widget.setFont(list_font)
-
-        # 버튼 레이아웃 추가 (이 부분이 누락되었습니다!)
         btn_layout_center = QHBoxLayout()
         btn_delete = QPushButton("🗑 Delete Selected")
         btn_delete.clicked.connect(self.delete_question)
@@ -1464,7 +1362,7 @@ class GeneratorApp(QMainWindow):
 
         center_layout.addWidget(list_title)
         center_layout.addWidget(self.list_widget)
-        center_layout.addLayout(btn_layout_center)  # 이 부분이 중요합니다!
+        center_layout.addLayout(btn_layout_center)
         center_card.setLayout(center_layout)
 
         # ===== RIGHT: PREVIEW + SETTINGS + ACTION =====
@@ -1473,23 +1371,19 @@ class GeneratorApp(QMainWindow):
         right_layout = QVBoxLayout()
         right_layout.setSpacing(10)
 
-        # Preview Title (간단하게)
         preview_title = QLabel("👁️ Live PDF Preview")
         preview_title.setObjectName("title")
         right_layout.addWidget(preview_title)
 
-        # Settings Summary (한 줄 + Edit 버튼)
         self.settings_summary = SettingsSummaryWidget(self)
         self.settings_summary.edit_btn.clicked.connect(self.open_settings_dialog)
         self.settings_summary.update_summary(self.settings)
         right_layout.addWidget(self.settings_summary)
 
-        # PDF Preview Widget (확장된 영역) - 키보드 포커스 설정
         self.pdf_preview = PDFPreviewWidget()
         self.pdf_preview.refresh_btn.clicked.connect(self.generate_live_preview)
-        self.pdf_preview.setFocusPolicy(Qt.StrongFocus)  # 키보드 이벤트 받기
+        self.pdf_preview.setFocusPolicy(Qt.StrongFocus)
 
-        # 버튼들을 하단에 배치
         button_container = QWidget()
         button_layout = QHBoxLayout(button_container)
         button_layout.setContentsMargins(0, 0, 0, 0)
@@ -1536,9 +1430,9 @@ class GeneratorApp(QMainWindow):
 
         button_layout.addWidget(btn_pdf)
         button_layout.addWidget(btn_answer)
-        button_layout.addWidget(btn_answer_key)  # 추가
+        button_layout.addWidget(btn_answer_key)
 
-        right_layout.addWidget(self.pdf_preview, 1)  # stretch factor를 1로 설정하여 최대한 확장
+        right_layout.addWidget(self.pdf_preview, 1)
         right_layout.addWidget(button_container)
 
         right_card.setLayout(right_layout)
@@ -1554,7 +1448,6 @@ class GeneratorApp(QMainWindow):
         self.apply_style()
 
     def open_settings_dialog(self):
-        """Open settings dialog"""
         dialog = ExamSettingsDialog(self)
         dialog.set_settings(self.settings)
         
@@ -1565,8 +1458,7 @@ class GeneratorApp(QMainWindow):
             QMessageBox.information(self, "Settings Updated", "Exam settings have been updated successfully.")
 
     def on_content_changed(self):    
-        # Reduced delay for faster preview updates
-        self.preview_timer.start(800)  # Changed from 1500 to 800ms
+        self.preview_timer.start(800)
 
     def on_list_reordered(self):
         for idx, q in enumerate(self.questions):
@@ -1575,7 +1467,6 @@ class GeneratorApp(QMainWindow):
         self.on_content_changed()
 
     def generate_live_preview(self):
-        """Generate PDF and show in preview widget"""
         if not self.questions:
             self.pdf_preview.status_label.setText("No questions added yet.")
             self.pdf_preview.preview_label.setText("📄 No questions added.\n\nAdd a question to see live PDF preview.")
@@ -1592,9 +1483,8 @@ class GeneratorApp(QMainWindow):
         self.temp_pdf_path = os.path.join(temp_dir, f"exam_preview_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
         
         try:
-            # is_preview=False로 변경하여 저장용 PDF와 완전히 동일하게 생성
             self._generate_pdf_to_file(self.temp_pdf_path, is_preview=False)
-            # 잠시 대기 후 미리보기 로드
+            # 저장된 페이지가 있으면 해당 페이지로 이동하도록 load_pdf에서 처리됨
             QTimer.singleShot(200, lambda: self.pdf_preview.load_pdf(self.temp_pdf_path))
             self.pdf_preview.status_label.setText(f"✅ Preview updated | {len(self.questions)} questions")
         except Exception as e:
@@ -1603,7 +1493,6 @@ class GeneratorApp(QMainWindow):
             traceback.print_exc()
 
     def _draw_student_info(self, c, width, height, margin_left, margin_right, current_y, available_width):
-        """학생 정보 섹션 - 한 줄로 간략하게 배치"""
         if not self.settings.get('include_student_info', True):
             return current_y
         
@@ -1618,23 +1507,19 @@ class GeneratorApp(QMainWindow):
         
         c.setFont("Helvetica", 9)
         
-        # 필드 값 가져오기
         name = self.settings.get('student_name', '') or "_________________________"
         student_id = self.settings.get('student_id', '') or "_________________________"
         dept = self.settings.get('department', '') or "_________________________"
         
-        # 한 줄에 모두 배치 (컬럼 간격 균등하게)
         col_width = (available_width - 40) // 3
         
         c.drawString(margin_left + 12, current_y - 28, f"Name: {name}")
         c.drawString(margin_left + 12 + col_width, current_y - 28, f"ID: {student_id}")
         c.drawString(margin_left + 12 + col_width * 2, current_y - 28, f"Dept: {dept}")
         
-        return current_y - 45  # 학생정보 박스 높이만큼 이동
-
+        return current_y - 45
 
     def _wrap_text(self, text, max_width, font_size=11):
-        """텍스트를 주어진 너비에 맞게 자동 줄바꿈"""
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
         
@@ -1642,7 +1527,6 @@ class GeneratorApp(QMainWindow):
         lines = []
         current_line = []
         
-        # 임시 캔버스로 텍스트 너비 측정
         temp_c = canvas.Canvas(tempfile.mktemp(suffix='.pdf'))
         temp_c.setFont("Helvetica", font_size)
         
@@ -1652,7 +1536,6 @@ class GeneratorApp(QMainWindow):
             text_width = temp_c.stringWidth(test_line, "Helvetica", font_size)
             
             if text_width > max_width and len(current_line) > 1:
-                # 단어가 너무 길면 줄바꿈
                 current_line.pop()
                 lines.append(' '.join(current_line))
                 current_line = [word]
@@ -1665,26 +1548,21 @@ class GeneratorApp(QMainWindow):
         
     def _draw_question_standard(self, c, questions, margin_left, margin_right, width, height,
                             line_height, font_size, available_width, start_y):
-        """표준 레이아웃으로 질문 표시 (Two column과 일관성 유지)"""
         current_y = start_y
         page_bottom_margin = 0
         
         for q in questions:
-            # 필요 높이 계산
             needed_height = self._estimate_question_height(q, line_height, font_size, available_width)
             
-            # 새 페이지 필요 여부 확인
             if current_y - needed_height < page_bottom_margin:
                 c.showPage()
                 current_y = height - 80
                 c.setFont("Helvetica", font_size)
             
-            # 질문 그리기
             current_y = self._draw_single_question_standard(
                 c, q, margin_left, current_y, line_height, font_size, available_width
             )
             
-            # 구분선
             current_y -= line_height
             c.line(margin_left, current_y + 10, width - margin_right, current_y + 10)
             current_y -= 10
@@ -1692,10 +1570,8 @@ class GeneratorApp(QMainWindow):
         return current_y
 
     def _draw_single_question_standard(self, c, q, x, y, line_height, font_size, available_width):
-        """표준 레이아웃에서 단일 질문 그리기"""
         current_y = y
         
-        # 번호 스타일 적용
         numbering = self.settings.get('numbering_style', '1, 2, 3...')
         if numbering == "1), 2), 3)...":
             q_prefix = f"{q['id']})"
@@ -1706,7 +1582,6 @@ class GeneratorApp(QMainWindow):
         else:
             q_prefix = f"Q{q['id']}"
         
-        # 질문 텍스트 자동 줄바꿈
         points_text = f" ({q['score']} pts)" if self.settings.get('show_points', True) else ""
         full_question_text = f"{q_prefix}. {q['text']}{points_text}"
         
@@ -1720,125 +1595,133 @@ class GeneratorApp(QMainWindow):
         current_y -= 5
         c.setFont("Helvetica", font_size - 1)
         
-        # 문제 내용 표시
         current_y = self._draw_question_content(c, q, x, current_y, line_height, font_size, available_width)
         
         return current_y
 
     def _estimate_question_height(self, q, line_height, font_size, available_width):
-        """질문의 예상 높이 계산 (페이지 분할용)"""
         total_height = 0
         
-        # 질문 텍스트 높이
         question_text = q['text']
         approx_chars_per_line = int(available_width / (font_size * 0.6))
         question_lines = max(1, (len(question_text) // approx_chars_per_line) + 1)
         total_height += question_lines * line_height + 10
         
-        # 문제 유형별 추가 높이
-        if q["type"] == 0:  # Multiple Choice
+        if q["type"] == 0:
             choices_count = len(q.get("choices", []))
             total_height += choices_count * (line_height - 4) + 20
-        elif q["type"] == 1:  # True/False
+        elif q["type"] == 1:
             total_height += line_height
-        elif q["type"] == 2:  # Fill in Blank
+        elif q["type"] == 2:
             total_height += line_height
-        elif q["type"] == 3:  # Short Answer
+        elif q["type"] == 3:
             total_height += line_height
-        elif q["type"] == 4:  # Essay
+        elif q["type"] == 4:
             total_height += self.settings.get('essay_lines', 4) * line_height
-        elif q["type"] == 5:  # Matching
+        elif q["type"] == 5:
             pairs_count = len(q.get("matching_pairs", []))
             total_height += max(3, pairs_count) * (line_height - 4)
-        elif q["type"] == 6:  # Ordering
+        elif q["type"] == 6:
             total_height += line_height
-        elif q["type"] == 7:  # Code
+        elif q["type"] == 7:
             total_height += 60
-        elif q["type"] == 8:  # Calculation
+        elif q["type"] == 8:
             total_height += line_height * 2
         
         return total_height + 30
 
     def _draw_question_content(self, c, q, margin_left, current_y, line_height, font_size, available_width):
-        """문제 유형별 내용 표시 (Answer: ___ 제거)"""
+        """Display question content on exam paper (no answer spaces)"""
         
-        if q["type"] == 0:  # Multiple Choice
+        if q["type"] == 0:  # Multiple Choice - show options with [] for marking
             for i, choice in enumerate(q.get("choices", []), 1):
                 choice_display = choice[:70] + "..." if len(choice) > 70 else choice
                 c.drawString(margin_left + 10, current_y, f"   {chr(96+i)}. {choice_display}")
                 current_y -= line_height - 4
-            # Answer: ___ 제거
         
-        elif q["type"] == 1:  # True/False
-            c.drawString(margin_left + 10, current_y, "( ) True   ( ) False")
-            # Answer: ___ 제거
+        elif q["type"] == 1:  # True/False - show as True / False
+            c.drawString(margin_left + 10, current_y, f"   a. True")
+            current_y -= line_height - 4
+            c.drawString(margin_left + 10, current_y, f"   b. False")
         
-        elif q["type"] == 2:  # Fill in Blank
-            blank_count = len(q.get("blanks", [])) or 3
-            blanks = " ______ " * min(blank_count, 5)
-            c.drawString(margin_left + 10, current_y, blanks)
+        elif q["type"] == 2:  # Fill in the Blank - only show blanks, no answer space
+            # blank_count = len(q.get("blanks", [])) or 3
+            # # Display the question with blanks embedded
+            # blanks_str = " ______ " * min(blank_count, 5)
+            # c.drawString(margin_left + 10, current_y, blanks_str)
+            pass
         
-        elif q["type"] == 3:  # Short Answer
-            # Answer: ___ 제거
-            c.drawString(margin_left + 10, current_y, "____________________")
+        elif q["type"] == 3:  # Short Answer - no answer space (only on answer sheet)
+            # No blank line on exam paper
+            pass
         
-        elif q["type"] == 4:  # Essay
-            c.drawString(margin_left + 10, current_y, "[Write your answer below]")
-            for i in range(self.settings.get('essay_lines', 4)):
-                current_y -= line_height
-                c.line(margin_left + 10, current_y, margin_left + available_width - 20, current_y)
-        
-        elif q["type"] == 5:  # Matching
-            c.drawString(margin_left + 10, current_y, "Match the following:")
+        elif q["type"] == 4:  # Essay - no writing space on exam paper
+            # Just the instruction
+            c.drawString(margin_left + 10, current_y, "[Essay question - answer on separate paper]")
             current_y -= line_height
-            pairs = q.get("matching_pairs", [])[:5]
-            for left, right in pairs:
-                left_display = left[:35] + "..." if len(left) > 35 else left
-                right_display = right[:20] if right else "______"
-                c.drawString(margin_left + 20, current_y, f"{left_display}  ↔  {right_display}")
-                current_y -= line_height - 4
         
-        elif q["type"] == 6:  # Ordering
+        elif q["type"] == 5:  # Matching - show both columns for matching
+            pairs = q.get("matching_pairs", [])[:8]
+            if pairs:
+                # Find maximum length of left items
+                max_left_len = 0
+                for left, right in pairs:
+                    left_len = len(left[:30])
+                    max_left_len = max(max_left_len, left_len)
+                
+                # Calculate column positions
+                left_col_width = min(max_left_len * 4 + 20, available_width // 2)
+                right_col_x = margin_left + left_col_width + 30
+                
+                c.setFont("Helvetica", font_size - 1)
+                
+                # Draw matching pairs side by side (no header, no instruction)
+                for i, (left, right) in enumerate(pairs):
+                    left_display = left[:35] + "..." if len(left) > 35 else left
+                    right_display = right[:35] + "..." if len(right) > 35 else right
+                    
+                    # Left column with numbers
+                    c.drawString(margin_left + 20, current_y, f"{i+1}. {left_display}")
+                    # Right column with letters
+                    c.drawString(right_col_x, current_y, f"{chr(97+i)}. {right_display}")
+                    current_y -= line_height - 2
+            else:
+                c.drawString(margin_left + 10, current_y, "Match the following:")
+
+        
+        elif q["type"] == 6:  # Ordering - show items to order
             items = q.get("ordering_items", [])
             if items:
                 c.drawString(margin_left + 10, current_y, "Arrange in correct order:")
                 current_y -= line_height
-                for i, item in enumerate(items[:4], 1):
-                    item_display = item[:40] + "..." if len(item) > 40 else item
+                # 모든 항목 표시 ([:5] 제한 제거)
+                for i, item in enumerate(items, 1):
+                    item_display = item[:50] + "..." if len(item) > 50 else item
                     c.drawString(margin_left + 20, current_y, f"   {i}. {item_display}")
                     current_y -= line_height - 4
             else:
-                c.drawString(margin_left + 10, current_y, "Order: ___ , ___ , ___ , ___")
+                c.drawString(margin_left + 10, current_y, "Arrange in correct order:")
+
         
-        elif q["type"] == 7:  # Code
+        elif q["type"] == 7:  # Code - show code area
             c.drawString(margin_left + 10, current_y, "Write your code below:")
             current_y -= line_height * 2
             code_height = 50
             c.rect(margin_left + 10, current_y - code_height, available_width - 30, code_height)
         
-        elif q["type"] == 8:  # Calculation
-            formula = q.get('formula', '')
-            if formula:
-                c.drawString(margin_left + 10, current_y, f"Formula: {formula}")
-                current_y -= line_height
-            c.drawString(margin_left + 10, current_y, "Show your work:")
-            current_y -= line_height * 2
-            c.line(margin_left + 10, current_y, margin_left + available_width - 20, current_y)
+        elif q["type"] == 8:  # Calculation - show work area            
+            pass
         
         return current_y
 
     def _draw_question_two_column_v2(self, c, questions, margin_left, margin_right, width, height,
                                   line_height, font_size, available_width, start_y):
-        """
-        개선된 Two column layout - 문제 간 간격을 충분히 줌
-        """
         col_gap = 15
         col_width = (available_width - col_gap) // 2
         
         left_col_x = margin_left
         right_col_x = margin_left + col_width + col_gap
         
-        # 페이지 하단 마진
         page_bottom_margin = 25
         
         current_y = start_y
@@ -1846,19 +1729,16 @@ class GeneratorApp(QMainWindow):
         total_questions = len(questions)
         
         while q_index < total_questions:
-            # 새 페이지 시작
             if q_index > 0:
                 c.showPage()
                 current_y = height - 35
             
-            # 왼쪽 컬럼 채우기
             left_y = current_y
             left_q_indices = []
             
             temp_index = q_index
             while temp_index < total_questions:
                 q = questions[temp_index]
-                # 문제 높이에 추가 간격 10pt 포함
                 q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
                 
                 if left_y - q_height > page_bottom_margin:
@@ -1868,7 +1748,6 @@ class GeneratorApp(QMainWindow):
                 else:
                     break
             
-            # 오른쪽 컬럼 채우기
             right_q_indices = []
             right_y = current_y
             
@@ -1884,7 +1763,6 @@ class GeneratorApp(QMainWindow):
                 else:
                     break
             
-            # 문제 그리기 (왼쪽 컬럼)
             if left_q_indices:
                 y_pos = current_y
                 for idx in left_q_indices:
@@ -1892,15 +1770,13 @@ class GeneratorApp(QMainWindow):
                     y_pos = self._draw_single_question_two_col_v3(
                         c, q, left_col_x, y_pos, line_height, font_size, col_width, idx + 1
                     )
-                    y_pos -= 25  # 문제 간 간격을 25로 증가 (구분선을 위한 공간)
-                    # 구분선 그리기 (마지막 문제 제외)
+                    y_pos -= 25
                     if idx != left_q_indices[-1]:
                         c.setStrokeColorRGB(0.8, 0.8, 0.8)
                         c.setLineWidth(0.5)
                         c.line(left_col_x, y_pos + 12, left_col_x + col_width, y_pos + 12)
                         c.setStrokeColor(black)
             
-            # 문제 그리기 (오른쪽 컬럼)
             if right_q_indices:
                 y_pos = current_y
                 for idx in right_q_indices:
@@ -1908,15 +1784,13 @@ class GeneratorApp(QMainWindow):
                     y_pos = self._draw_single_question_two_col_v3(
                         c, q, right_col_x, y_pos, line_height, font_size, col_width, idx + 1
                     )
-                    y_pos -= 25  # 문제 간 간격을 25로 증가
-                    # 구분선 그리기 (마지막 문제 제외)
+                    y_pos -= 25
                     if idx != right_q_indices[-1]:
                         c.setStrokeColorRGB(0.8, 0.8, 0.8)
                         c.setLineWidth(0.5)
                         c.line(right_col_x, y_pos + 12, right_col_x + col_width, y_pos + 12)
                         c.setStrokeColor(black)
             
-            # 다음 페이지로 이동할 인덱스 결정
             if right_q_indices:
                 q_index = right_q_indices[-1] + 1
             elif left_q_indices:
@@ -1925,46 +1799,40 @@ class GeneratorApp(QMainWindow):
                 q_index = temp_index if temp_index > q_index else q_index + 1
 
     def _estimate_question_height_two_col_v2(self, q, line_height, font_size, col_width):
-        """개선된 Two column용 질문 높이 예측 (더 정확하게)"""
-        total_height = 20  # 기본 여백
+        total_height = 20
         
-        # 질문 텍스트 높이
         question_text = q['text']
-        # 한 줄당 평균 문자 수 (폰트 크기 11pt 기준)
         chars_per_line = max(10, int(col_width / (font_size * 0.55)))
         question_lines = max(1, (len(question_text) // chars_per_line) + 1)
         total_height += question_lines * (line_height + 2)
         
-        # 문제 유형별 추가 높이
-        if q["type"] == 0:  # Multiple Choice
+        if q["type"] == 0:
             choices_count = min(len(q.get("choices", [])), 5)
             total_height += choices_count * (line_height - 2) + 10
-        elif q["type"] == 1:  # True/False
+        elif q["type"] == 1:
+            total_height += (line_height - 2) * 2  # True and False
+        elif q["type"] == 2:
             total_height += line_height - 2
-        elif q["type"] == 2:  # Fill in Blank
-            total_height += line_height - 2
-        elif q["type"] == 3:  # Short Answer
-            total_height += line_height - 2
-        elif q["type"] == 4:  # Essay
-            essay_lines = min(3, self.settings.get('essay_lines', 4))
-            total_height += essay_lines * (line_height - 2) + 5
-        elif q["type"] == 5:  # Matching
+        elif q["type"] == 3:
+            total_height += 5  # minimal space
+        elif q["type"] == 4:
+            total_height += 20
+        elif q["type"] == 5:
             pairs_count = min(len(q.get("matching_pairs", [])), 4)
-            total_height += max(2, pairs_count) * (line_height - 2) + 10
-        elif q["type"] == 6:  # Ordering
-            total_height += line_height
-        elif q["type"] == 7:  # Code
+            total_height += max(2, pairs_count) * (line_height - 2) + 20
+        elif q["type"] == 6:
+            items_count = min(len(q.get("ordering_items", [])), 4)
+            total_height += items_count * (line_height - 2) + 15
+        elif q["type"] == 7:
             total_height += 45
-        elif q["type"] == 8:  # Calculation
-            total_height += (line_height - 2) * 2 + 10
+        elif q["type"] == 8:
+            total_height += (line_height - 2) * 3 + 10
         
         return total_height
 
     def _draw_single_question_two_col_v3(self, c, q, x, y, line_height, font_size, col_width, q_num):
-        """개선된 Two column용 단일 문제 그리기 (문제 간 간격 충분히 줌)"""
         current_y = y
         
-        # 번호 스타일
         numbering = self.settings.get('numbering_style', '1, 2, 3...')
         if numbering == "1), 2), 3)...":
             q_prefix = f"{q_num})"
@@ -1975,13 +1843,11 @@ class GeneratorApp(QMainWindow):
         else:
             q_prefix = f"{q_num}."
         
-        # 점수 표시
         points_text = f" [{q['score']} pts]" if self.settings.get('show_points', True) else ""
         full_text = f"{q_prefix} {q['text']}{points_text}"
         
         c.setFont("Helvetica-Bold", font_size - 1)
         
-        # 텍스트 줄바꿈
         text_lines = self._wrap_text(full_text, col_width - 10, font_size - 1)
         for idx, line in enumerate(text_lines):
             if idx == 0:
@@ -1994,78 +1860,93 @@ class GeneratorApp(QMainWindow):
         current_y -= 6
         c.setFont("Helvetica", font_size - 2)
         
-        # 문제 내용
-        current_y = self._draw_question_content_two_col_v3(c, q, x, current_y, line_height, font_size, col_width)
+        current_y = self._draw_question_content_two_col(c, q, x, current_y, line_height, font_size, col_width)
         
         return current_y
 
-    def _draw_question_content_two_col_v3(self, c, q, x, current_y, line_height, font_size, col_width):
-        """문제 내용 표시 (Answer: ___ 제거)"""
-        bottom_margin = 8  # 내용 하단 여백 추가
+    def _draw_question_content_two_col(self, c, q, x, current_y, line_height, font_size, col_width):
+        """Display question content in two-column layout on exam paper"""
         
-        if q["type"] == 0:  # Multiple Choice
+        if q["type"] == 0:  # Multiple Choice - show [] for marking
             c.setFont("Helvetica", font_size - 2)
             for i, choice in enumerate(q.get("choices", [])[:5], 1):
-                choice_display = choice[:35] + "..." if len(choice) > 35 else choice
+                choice_display = choice[:30] + "..." if len(choice) > 30 else choice
                 c.drawString(x + 8, current_y, f"   {chr(96+i)}. {choice_display}")
                 current_y -= line_height - 2
-            # Answer: ___ 제거
-            current_y -= bottom_margin
         
-        elif q["type"] == 1:  # True/False
-            c.drawString(x + 8, current_y, "   ( ) True   ( ) False")
-            # Answer: ___ 제거
-            current_y -= bottom_margin
+        elif q["type"] == 1:  # True/False - show [ ] for marking
+            c.drawString(x + 8, current_y, f"   a. True")
+            current_y -= line_height - 2
+            c.drawString(x + 8, current_y, f"   b. False")
+            current_y -= 5
         
-        elif q["type"] == 2:  # Fill in Blank
-            blank_count = min(len(q.get("blanks", [])), 4) or 3
-            blanks = " ______ " * blank_count
-            c.drawString(x + 8, current_y, blanks)
-            current_y -= bottom_margin
+        elif q["type"] == 2:  # Fill in the Blank - only blanks
+            # blank_count = min(len(q.get("blanks", [])), 4) or 3
+            # blanks = " ______ " * blank_count
+            # c.drawString(x + 8, current_y, blanks)
+            # # NO additional answer space
+            # current_y -= 5
+            pass
         
-        elif q["type"] == 3:  # Short Answer
-            # Answer: ___ 제거 - 빈 줄만 남김
-            c.drawString(x + 8, current_y, "   _______________")
-            current_y -= bottom_margin
+        elif q["type"] == 3:  # Short Answer - no answer space on exam
+            # Skip - no blank line
+            pass
         
-        elif q["type"] == 4:  # Essay
-            c.drawString(x + 8, current_y, "   [Write your answer below]")
-            essay_lines = min(3, self.settings.get('essay_lines', 4))
-            for i in range(essay_lines):
+        elif q["type"] == 4:  # Essay - minimal space
+            # c.drawString(x + 8, current_y, "[Answer on separate paper]")
+            # current_y -= line_height
+            pass
+        
+        elif q["type"] == 5:  # Matching - both columns for matching
+            pairs = q.get("matching_pairs", [])[:5]
+            if pairs:
+                # Prepare display strings
+                left_items = []
+                right_items = []
+                for i, (left, right) in enumerate(pairs):
+                    left_display = left[:18] + ".." if len(left) > 18 else left
+                    right_display = right[:18] + ".." if len(right) > 18 else right
+                    left_items.append(f"{i+1}. {left_display}")
+                    right_items.append(f"{chr(97+i)}. {right_display}")
+                
+                # Find maximum width of left column
+                max_left_width = 0
+                for item in left_items:
+                    item_width = c.stringWidth(item, "Helvetica", font_size - 2)
+                    max_left_width = max(max_left_width, item_width)
+                
+                c.setFont("Helvetica", font_size - 2)
+                right_col_x = x + max_left_width + 25
+                
+                # Draw side by side - clean, no extra text
+                for i in range(max(len(left_items), len(right_items))):
+                    if i < len(left_items):
+                        c.drawString(x + 15, current_y, left_items[i])
+                    if i < len(right_items):
+                        c.drawString(right_col_x, current_y, right_items[i])
+                    current_y -= line_height - 2
+            else:
+                c.drawString(x + 8, current_y, "Match:")
+
+        
+        elif q["type"] == 6:  # Ordering - show items, order on answer sheet
+            items = q.get("ordering_items", [])
+            if items:
+                c.drawString(x + 8, current_y, "Order:")
                 current_y -= line_height
-                c.line(x + 8, current_y, x + col_width - 15, current_y)
-            current_y -= bottom_margin
-        
-        elif q["type"] == 5:  # Matching
-            c.drawString(x + 8, current_y, "   Match:")
-            current_y -= line_height
-            pairs = q.get("matching_pairs", [])[:4]
-            for left, right in pairs:
-                left_display = left[:20] + "..." if len(left) > 20 else left
-                c.drawString(x + 14, current_y, f"   {left_display} → _____")
-                current_y -= line_height - 2
-            current_y -= bottom_margin
-        
-        elif q["type"] == 6:  # Ordering
-            c.drawString(x + 8, current_y, "   Order: ___ , ___ , ___ , ___")
-            current_y -= bottom_margin
+                # 모든 항목 표시 ([:4] 제한 제거)
+                for i, item in enumerate(items, 1):
+                    item_display = item[:25] + "..." if len(item) > 25 else item
+                    c.drawString(x + 14, current_y, f"{i}. {item_display}")
+                    current_y -= line_height - 2
+            current_y -= 5
+
         
         elif q["type"] == 7:  # Code
-            c.drawString(x + 8, current_y, "   Code:")
-            current_y -= line_height
-            c.rect(x + 8, current_y - 30, col_width - 20, 30)
-            current_y -= bottom_margin + 30
+            pass
         
         elif q["type"] == 8:  # Calculation
-            formula = q.get('formula', '')
-            if formula:
-                formula_display = formula[:25] + "..." if len(formula) > 25 else formula
-                c.drawString(x + 8, current_y, f"   Formula: {formula_display}")
-                current_y -= line_height
-            c.drawString(x + 8, current_y, "   Show your work:")
-            current_y -= line_height
-            c.line(x + 8, current_y, x + col_width - 15, current_y)
-            current_y -= bottom_margin
+            pass
         
         return current_y
 
@@ -2090,18 +1971,14 @@ class GeneratorApp(QMainWindow):
         font_size = self.settings.get('font_size', 11)
         title_font_size = self.settings.get('title_font_size', 18)
         
-        # ===== 헤더 영역 =====
+        # ===== Header =====
         current_y = height - margin_top
         
-        # 시험 제목
         c.setFont("Helvetica-Bold", title_font_size)
         c.drawCentredString(width/2, current_y, exam_title)
         current_y -= 22
         
-        # 날짜 및 QR 코드, 총점 표시
         c.setFont("Helvetica", 10)
-        
-        # 날짜 대신 QR 코드를 왼쪽에 표시
         total_points = sum(q.get('score', 0) for q in self.questions)
         
         if self.settings.get('show_qr', True):
@@ -2115,15 +1992,12 @@ class GeneratorApp(QMainWindow):
             c.drawImage(qr_path, margin_left, current_y - 15, width=35, height=35)
             if os.path.exists(qr_path):
                 os.remove(qr_path)
-            
-            # 오른쪽에 총점만 표시
             c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
         else:
             c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
         
         current_y -= 18
         
-        # 시험지 설명
         instruction = self.settings.get('exam_instruction', '')
         if instruction:
             c.setFont("Helvetica-Oblique", 9)
@@ -2133,28 +2007,725 @@ class GeneratorApp(QMainWindow):
                 current_y -= line_height - 4
             current_y -= 8
         
-        # 구분선
         c.line(margin_left, current_y, width - margin_right, current_y)
         current_y -= 15
         
-        # ===== 학생 정보 영역 제거 (주석 처리 또는 삭제) =====
-        # current_y = self._draw_student_info(c, width, height, margin_left, margin_right, 
-        #                                     current_y, available_width)
+        # ===== Student Info Section =====
+        # if self.settings.get('include_student_info', True):
+        #     current_y = self._draw_student_info(c, width, height, margin_left, margin_right, 
+        #                                         current_y, available_width)
         
-        # 학생정보와 문제영역 사이 간격 조정 (제거했으므로 간격 축소)
-        current_y -= 15
+        # current_y -= 15
         
-        # ===== 질문 영역 =====
+        # ===== Question Area =====
         if layout_style == "Two Column":
             self._draw_question_two_column_v2(c, self.questions, margin_left, margin_right, 
                                             width, height, line_height, font_size, 
                                             available_width, current_y)
         else:
             self._draw_question_standard(c, self.questions, margin_left, margin_right, width, height,
-                                        line_height, font_size, available_width, current_y, 40)
+                                        line_height, font_size, available_width, current_y)
         
         c.save()
 
+    def export_answer_sheet(self):
+        """Export answer sheet with proper answer spaces for each question type - Two Column Layout"""
+        if not self.questions:
+            QMessageBox.warning(self, "Notice", "Please add questions first.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Answer Sheet PDF", "", "PDF (*.pdf)")
+        if not file_path:
+            return
+
+        page_size = PAGE_SIZES.get(self.settings.get('page_size', 'A4'), A4)
+        margin = 35  # 여백
+        col_gap = 20  # 두 컬럼 간 간격
+        col_width = (page_size[0] - (margin * 2) - col_gap) // 2
+        
+        base_font_size = 12  # 기본 폰트 크기 12pt
+        line_height = int(self.settings.get('line_spacing', 1.5) * base_font_size)
+        small_line_height = line_height - 3
+        
+        c = canvas.Canvas(file_path, pagesize=page_size)
+        width, height = page_size
+
+        # 타이틀
+        c.setFont("Helvetica-Bold", 18)
+        c.drawCentredString(width/2, height - 35, "ANSWER SHEET")
+        c.setFont("Helvetica", 10)
+        c.drawCentredString(width/2, height - 55, f"{self.settings.get('exam_title', 'Exam')}")
+
+        y = height - 85
+        
+        # Student info - 중앙에 한 줄로
+        if self.settings.get('include_student_info', True):
+            c.setFont("Helvetica", 10)
+            name = self.settings.get('student_name', '') or "_________________________"
+            student_id = self.settings.get('student_id', '') or "_________________________"
+            dept = self.settings.get('department', '') or "_________________________"
+            
+            total_width = width - (margin * 2)
+            col_width_student = total_width // 3
+            
+            x1 = margin
+            x2 = margin + col_width_student
+            x3 = margin + (col_width_student * 2)
+            
+            c.drawString(x1, y, f"Name: {name}")
+            c.drawString(x2, y, f"ID: {student_id}")
+            c.drawString(x3, y, f"Dept: {dept}")
+            
+            y -= 25
+        else:
+            y -= 15
+
+        y -= 15
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(margin, y, "Write your answers below:")
+        y -= line_height
+
+        c.setFont("Helvetica", base_font_size)
+        
+        # Two Column 배치 - 왼쪽 컬럼에 가능한 한 많이 배치
+        left_x = margin
+        right_x = margin + col_width + col_gap
+        
+        # 각 질문의 필요 높이 계산
+        question_heights = []
+        for q in self.questions:
+            height_needed = self._calculate_answer_sheet_height(q, col_width, line_height, small_line_height)
+            question_heights.append(height_needed)
+        
+        # 왼쪽 컬럼에 배치할 질문 결정
+        left_indices = []
+        right_indices = []
+        current_height = 0
+        page_height = height - margin - 100  # 페이지 하단 여백 고려
+        
+        for idx, q_height in enumerate(question_heights):
+            if current_height + q_height <= page_height:
+                left_indices.append(idx)
+                current_height += q_height + small_line_height  # 문제 간 간격 추가
+            else:
+                # 왼쪽 컬럼이 가득 차면 오른쪽 컬럼에 배치
+                right_indices.append(idx)
+        
+        # 나머지 질문들을 오른쪽 컬럼에 순차적으로 배치 (여러 페이지에 걸쳐)
+        all_pages = []
+        current_page_indices = []
+        current_page_height = 0
+        
+        for idx in right_indices:
+            q_height = question_heights[idx]
+            if current_page_height + q_height <= page_height:
+                current_page_indices.append(idx)
+                current_page_height += q_height + small_line_height
+            else:
+                if current_page_indices:
+                    all_pages.append(current_page_indices)
+                current_page_indices = [idx]
+                current_page_height = q_height + small_line_height
+        
+        if current_page_indices:
+            all_pages.append(current_page_indices)
+        
+        # 첫 페이지: 왼쪽 컬럼 그리기
+        current_y_left = y
+        for idx in left_indices:
+            q = self.questions[idx]
+            if current_y_left < margin + 50:
+                # 새 페이지가 필요하면 다음 페이지로 넘김
+                c.showPage()
+                current_y_left = height - margin
+                c.setFont("Helvetica", base_font_size)
+            
+            current_y_left = self._draw_answer_sheet_question(
+                c, q, left_x, current_y_left, col_width, line_height, small_line_height, width, margin, base_font_size
+            )
+            current_y_left -= small_line_height
+        
+        # 오른쪽 컬럼: 여러 페이지에 걸쳐 그리기
+        for page_idx, page_indices in enumerate(all_pages):
+            if page_idx > 0:
+                c.showPage()
+            
+            current_y_right = y
+            for idx in page_indices:
+                q = self.questions[idx]
+                if current_y_right < margin + 50:
+                    c.showPage()
+                    current_y_right = height - margin
+                    c.setFont("Helvetica", base_font_size)
+                
+                current_y_right = self._draw_answer_sheet_question(
+                    c, q, right_x, current_y_right, col_width, line_height, small_line_height, width, margin, base_font_size
+                )
+                current_y_right -= small_line_height
+
+        c.save()
+        QMessageBox.information(self, "Success", f"Answer Sheet PDF has been created.\n{file_path}")
+
+    def _calculate_answer_sheet_height(self, q, col_width, line_height, small_line_height):
+        """질문이 차지하는 높이 계산 - _draw_answer_sheet_question와 일치하도록"""
+        qtype = q["type"]
+        total_height = line_height  # 기본 질문 한 줄 높이 (질문 번호 라인)
+        
+        if qtype == 0:  # Multiple Choice
+            choices = q.get("choices", [])
+            # 옵션 체크박스 한 줄에 모든 옵션 표시
+            total_height += small_line_height  # 체크박스 라인
+            total_height += 5  # 여백
+        
+        elif qtype == 1:  # True/False
+            total_height += 0  # 한 줄로 충분
+        
+        elif qtype == 2:  # Fill in the Blank
+            total_height += 0  # 한 줄로 충분
+        
+        elif qtype == 3:  # Short Answer
+            total_height += 0  # 한 줄로 충분
+        
+        elif qtype == 4:  # Essay
+            essay_lines = min(self.settings.get('essay_lines', 6), 6)
+            total_height += int(line_height * 0.7)  # 제목과의 간격
+            total_height += essay_lines * line_height  # 에세이 라인
+            total_height += 5  # 여백
+        
+        elif qtype == 5:  # Matching
+            pairs = q.get("matching_pairs", [])
+            total_height += line_height  # "Matching (Example...)" 라인
+            # 매칭 항목들을 여러 줄로 표시
+            lines_needed = (len(pairs) + 3) // 4  # 한 줄에 4개씩
+            total_height += lines_needed * small_line_height
+        
+        elif qtype == 6:  # Ordering
+            total_height += 0  # 한 줄로 충분
+        
+        elif qtype == 7:  # Code
+            total_height += line_height  # "Q{n}. Write your code below:" 라인
+            # 코드 영역 높이 계산
+            answer_key = q.get('answer', '')
+            if answer_key:
+                answer_lines = len(answer_key.split('\n'))
+                code_lines = max(3, answer_lines + 2)
+            else:
+                code_lines = 5  # 기본값
+            code_height = min(code_lines * 15, 250)  # 최대 250px
+            total_height += code_height + 10  # 코드 영역 + 여백
+        
+        elif qtype == 8:  # Calculation
+            total_height += line_height  # "Q{n}. Work:" 라인
+            total_height += line_height * 3  # 작업 공간 3줄
+            total_height += small_line_height  # Answer 라인 간격
+        
+        else:
+            total_height += 0
+        
+        return total_height
+
+    def _draw_answer_sheet_question(self, c, q, x, y, col_width, line_height, small_line_height, width, margin, base_font_size):
+        """Draw a single answer sheet question at specified position"""
+        
+        qtype = q["type"]
+        
+        c.setFont("Helvetica", base_font_size)
+        
+        if qtype == 0:  # Multiple Choice - [a] [b] [c] [d] 형태로만 표시
+            choices = q.get("choices", [])
+            # 질문 번호 표시
+            c.drawString(x, y, f"Q{q['id']}.")
+            
+            # 옵션 체크박스만 표시 (한 줄에 모두 표시)
+            line_text = "       "
+            for i in range(len(choices)):
+                line_text += f"  [{chr(97+i)}]"
+            c.drawString(x, y, line_text)
+            y -= line_height
+            
+            y -= 5  # 여백
+        
+        elif qtype == 1:  # True/False - [a] [b] 형태로만 표시
+            c.drawString(x, y, f"Q{q['id']}.   [a]    [b]")
+            y -= line_height
+        
+        elif qtype == 2:  # Fill in the Blank
+            blank_count = len(q.get("blanks", [])) or 3
+            blanks = " ______ " * blank_count
+            c.drawString(x, y, f"Q{q['id']}.   {blanks}")
+            y -= line_height
+        
+        elif qtype == 3:  # Short Answer
+            c.drawString(x, y, f"Q{q['id']}.   ____________________")
+            y -= line_height
+        
+        elif qtype == 4:  # Essay
+            c.setFont("Helvetica", base_font_size)
+            c.drawString(x, y, f"Q{q['id']}.")
+            y -= int(line_height * 0.7)
+            essay_lines = min(self.settings.get('essay_lines', 6), 6)
+            for i in range(essay_lines):
+                c.line(x, y, x + col_width - 10, y)
+                y -= line_height
+            y -= 5
+        
+        elif qtype == 5:  # Matching
+            pairs = q.get("matching_pairs", [])
+            c.drawString(x, y, f"Q{q['id']}.   Matching (Example: 1→a, 2→b):")
+            y -= line_height
+            # 여러 줄로 표시
+            match_line = ""
+            for i in range(len(pairs)):
+                match_line += f"{i+1}→___  "
+                if (i + 1) % 4 == 0 and i + 1 < len(pairs):
+                    c.drawString(x + 25, y, match_line)
+                    match_line = ""
+                    y -= small_line_height
+            if match_line:
+                c.drawString(x + 25, y, match_line)
+            y -= small_line_height
+        
+        elif qtype == 6:  # Ordering
+            items = q.get("ordering_items", [])
+            if items:
+                blank_placeholders = ", ".join(["___"] * len(items))
+                c.drawString(x, y, f"Q{q['id']}.   Correct order: {blank_placeholders}")
+            else:
+                c.drawString(x, y, f"Q{q['id']}.   Order: ___ , ___ , ___")
+            y -= line_height
+        
+        elif qtype == 7:  # Code - 사각형 영역이 제대로 그려지도록 수정
+            c.setFont("Helvetica", base_font_size)
+            c.drawString(x, y, f"Q{q['id']}. Write your code below:")
+            y -= line_height
+            
+            # answer key를 기준으로 코드 영역 크기 결정
+            answer_key = q.get('answer', '')
+            if answer_key:
+                answer_lines = len(answer_key.split('\n'))
+                code_lines = max(3, answer_lines + 2)
+            else:
+                code_lines = 5  # 기본값
+            
+            line_spacing = 14  # 줄 간격 (픽셀)
+            code_height = min(code_lines * line_spacing + 10, 250)  # 최대 250px
+            
+            # 사각형 그리기
+            rect_x = x
+            rect_y = y - code_height  # 사각형의 하단 y 좌표
+            rect_width = col_width - 10
+            rect_height = code_height
+            
+            c.rect(rect_x, rect_y, rect_width, rect_height)
+            
+            # 라인 번호 표시 (위에서 아래로 1, 2, 3... 순서)
+            # rect_y는 사각형의 하단이므로, 상단은 rect_y + rect_height
+            c.setFont("Helvetica", 7)
+            max_line_num = min(code_lines + 1, 15)
+            for i in range(1, max_line_num + 1):
+                # i번째 줄의 y 좌표: 사각형 상단에서 i번째 줄 위치 (위에서 아래로)
+                # 사각형 상단 = rect_y + rect_height
+                top_y = rect_y + rect_height
+                line_y = top_y - (i * line_spacing) + 5
+                # 사각형 하단을 넘지 않도록 체크
+                if line_y > rect_y + 5:
+                    c.drawString(rect_x + 5, line_y, f"{i}.")
+            
+            # y 위치 업데이트 (사각형 아래로 이동)
+            y = rect_y - 10
+            c.setFont("Helvetica", base_font_size)
+        
+        elif qtype == 8:  # Calculation - 작업 공간 3줄
+            c.drawString(x, y, f"Q{q['id']}. Work:")
+            y -= line_height
+            for i in range(3):  # 3줄
+                c.line(x, y, x + col_width - 10, y)
+                y -= line_height
+            y -= small_line_height
+            c.drawString(x, y, "Answer: ")
+            c.line(x + 45, y, x + col_width - 10, y)
+            y -= small_line_height
+        
+        else:
+            c.drawString(x, y, f"Q{q['id']}.   ____________________")
+            y -= line_height
+        
+        return y
+    
+    def export_answer_key_with_positions(self):
+        """Export answer key with positions to JSON file"""
+        if not self.questions:
+            QMessageBox.warning(self, "Notice", "No questions to export.")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save Answer Key with Positions", 
+            "", 
+            "JSON Files (*.json)"
+        )
+        if not file_path:
+            return
+        
+        try:
+            temp_dir = tempfile.gettempdir()
+            temp_pdf = os.path.join(temp_dir, f"temp_positions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+            
+            position_data = []
+            
+            self._generate_pdf_with_positions(temp_pdf, position_data)
+            
+            answer_key = {
+                "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
+                "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
+                "total_questions": len(self.questions),
+                "total_points": sum(q.get('score', 0) for q in self.questions),
+                "generated_at": datetime.now().isoformat(),
+                "answers": []
+            }
+            
+            for i, q in enumerate(self.questions):
+                q_info = {
+                    "question_id": q['id'],
+                    "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
+                    "score": q.get('score', 5),
+                    "answer": self._get_answer_text(q),
+                    "expected_answer": self._get_expected_answer(q),
+                    "position": position_data[i] if i < len(position_data) else None
+                }
+                answer_key["answers"].append(q_info)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(answer_key, f, ensure_ascii=False, indent=2)
+            
+            if os.path.exists(temp_pdf):
+                os.remove(temp_pdf)
+            
+            QMessageBox.information(
+                self, 
+                "Success", 
+                f"Answer key with positions has been saved.\n{file_path}\n\n"
+                f"Total: {len(self.questions)} questions, {answer_key['total_points']} points"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export answer key: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def _get_answer_text(self, q):
+        """Return answer text for display"""
+        qtype = q['type']
+        
+        if qtype == 0:
+            answer = q.get('answer', '')
+            choices = q.get('choices', [])
+            if answer and choices:
+                for i, choice in enumerate(choices):
+                    if answer.lower() in choice.lower() or chr(65+i) == answer.upper():
+                        return f"{chr(65+i)}. {choice}"
+            return answer or "Not specified"
+        
+        elif qtype == 1:
+            answer = q.get('answer', '')
+            return "True" if answer.lower() in ['true', 't', 'o'] else "False"
+        
+        elif qtype == 2:
+            blanks = q.get('blanks', [])
+            answer = q.get('answer', '')
+            if blanks:
+                return ", ".join(blanks)
+            return answer or "Not specified"
+        
+        elif qtype == 3:
+            return q.get('answer', 'Not specified')
+        
+        elif qtype == 4:
+            return "Essay - Manual grading required"
+        
+        elif qtype == 5:
+            pairs = q.get('matching_pairs', [])
+            if pairs:
+                matches = []
+                for i, (left, right) in enumerate(pairs):
+                    matches.append(f"{i+1}-{chr(65+i)}")
+                return "; ".join(matches)
+            return q.get('answer', 'Not specified')
+        
+        elif qtype == 6:
+            items = q.get('ordering_items', [])
+            if items:
+                return " → ".join(items)
+            return q.get('answer', 'Not specified')
+        
+        elif qtype == 7:
+            code = q.get('code_template', '')
+            if code:
+                return f"Expected output/implementation:\n{code[:200]}"
+            return q.get('answer', 'Manual grading required')
+        
+        elif qtype == 8:
+            formula = q.get('formula', '')
+            if formula:
+                return f"Formula: {formula}\nAnswer: {q.get('answer', 'Not specified')}"
+            return q.get('answer', 'Not specified')
+        
+        else:
+            return q.get('answer', 'Not specified')
+
+    def _get_expected_answer(self, q):
+        """Return simple expected answer for grading"""
+        qtype = q['type']
+        
+        if qtype == 0:
+            answer = q.get('answer', '')
+            choices = q.get('choices', [])
+            if answer and choices:
+                for i, choice in enumerate(choices):
+                    if answer.lower() in choice.lower():
+                        return chr(65+i)
+                    if answer.upper() == chr(65+i):
+                        return answer.upper()
+            return answer.upper() if answer else "?"
+        
+        elif qtype == 1:
+            answer = q.get('answer', '')
+            return "T" if answer.lower() in ['true', 't', 'o'] else "F"
+        
+        elif qtype == 2:
+            blanks = q.get('blanks', [])
+            return ", ".join(blanks) if blanks else q.get('answer', '')
+        
+        elif qtype == 3:
+            return q.get('answer', '')
+        
+        elif qtype == 4:
+            return "[ESSAY]"
+        
+        elif qtype == 5:
+            pairs = q.get('matching_pairs', [])
+            if pairs:
+                match_list = []
+                for idx, (left, right) in enumerate(pairs):
+                    match_list.append(f"{idx+1}-{chr(65+idx) if idx < 26 else idx}")
+                return "; ".join(match_list)
+            return q.get('answer', '')
+        
+        elif qtype == 6:
+            return " > ".join([str(i+1) for i in range(len(q.get('ordering_items', [])))])
+        
+        else:
+            return q.get('answer', '')
+
+    def _generate_pdf_with_positions(self, file_path, position_data):
+        """Generate PDF with question position tracking"""
+        exam_title = self.settings.get('exam_title', 'Untitled Exam') or "Untitled Exam"
+        exam_date = self.settings.get('exam_date', '') or datetime.now().strftime("%B %d, %Y")
+        
+        page_size = PAGE_SIZES.get(self.settings.get('page_size', 'A4'), A4)
+        
+        c = canvas.Canvas(file_path, pagesize=page_size)
+        width, height = page_size
+        
+        class PositionTracker:
+            def __init__(self):
+                self.positions = []
+                self.current_page = 0
+                self.current_x = 0
+                self.current_y = 0
+            
+            def add_position(self, q_id, x, y, page):
+                self.positions.append({
+                    'question_id': q_id,
+                    'page': page,
+                    'x': x,
+                    'y': y
+                })
+        
+        tracker = PositionTracker()
+        
+        margin_top = 25 * mm
+        margin_bottom = 15 * mm
+        margin_left = 20 * mm
+        margin_right = 20 * mm
+        
+        available_width = width - margin_left - margin_right
+        
+        line_height = int(self.settings.get('line_spacing', 1.5) * self.settings.get('font_size', 11))
+        layout_style = self.settings.get('layout_style', 'Two Column')
+        font_size = self.settings.get('font_size', 11)
+        title_font_size = self.settings.get('title_font_size', 18)
+        
+        current_y = height - margin_top
+        current_page = 1
+        
+        c.setFont("Helvetica-Bold", title_font_size)
+        c.drawCentredString(width/2, current_y, exam_title)
+        current_y -= 22
+        
+        c.setFont("Helvetica", 10)
+        total_points = sum(q.get('score', 0) for q in self.questions)
+        
+        if self.settings.get('show_qr', True):
+            qr_data = json.dumps({
+                "exam": exam_title,
+                "date": exam_date,
+                "questions": len(self.questions),
+                "total_score": total_points
+            })
+            qr_path = generate_qr(qr_data, f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            c.drawImage(qr_path, margin_left, current_y - 15, width=35, height=35)
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
+        else:
+            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
+        
+        current_y -= 18
+        
+        instruction = self.settings.get('exam_instruction', '')
+        if instruction:
+            c.setFont("Helvetica-Oblique", 9)
+            instruction_lines = self._wrap_text(instruction, available_width - 20, 9)
+            for line in instruction_lines:
+                c.drawString(margin_left, current_y, f"※ {line}")
+                current_y -= line_height - 4
+            current_y -= 8
+        
+        c.line(margin_left, current_y, width - margin_right, current_y)
+        current_y -= 15
+        current_y -= 15
+        
+        if layout_style == "Two Column":
+            self._draw_question_two_column_with_positions(
+                c, self.questions, margin_left, margin_right, 
+                width, height, line_height, font_size, 
+                available_width, current_y, tracker
+            )
+        else:
+            self._draw_question_standard_with_positions(
+                c, self.questions, margin_left, margin_right, width, height,
+                line_height, font_size, available_width, current_y, tracker, 40
+            )
+        
+        c.save()
+        
+        for idx, pos in enumerate(tracker.positions):
+            position_data.append(pos)
+
+    def _draw_question_two_column_with_positions(self, c, questions, margin_left, margin_right, 
+                                                width, height, line_height, font_size, 
+                                                available_width, start_y, tracker):
+        col_gap = 15
+        col_width = (available_width - col_gap) // 2
+        
+        left_col_x = margin_left
+        right_col_x = margin_left + col_width + col_gap
+        
+        page_bottom_margin = 25
+        current_page = 1
+        
+        current_y = start_y
+        q_index = 0
+        total_questions = len(questions)
+        
+        while q_index < total_questions:
+            if q_index > 0:
+                c.showPage()
+                current_page += 1
+                current_y = height - 35
+            
+            left_y = current_y
+            left_q_indices = []
+            
+            temp_index = q_index
+            while temp_index < total_questions:
+                q = questions[temp_index]
+                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
+                
+                if left_y - q_height > page_bottom_margin:
+                    left_q_indices.append(temp_index)
+                    left_y -= q_height
+                    temp_index += 1
+                else:
+                    break
+            
+            right_q_indices = []
+            right_y = current_y
+            
+            temp_index2 = temp_index
+            while temp_index2 < total_questions:
+                q = questions[temp_index2]
+                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
+                
+                if right_y - q_height > page_bottom_margin:
+                    right_q_indices.append(temp_index2)
+                    right_y -= q_height
+                    temp_index2 += 1
+                else:
+                    break
+            
+            if left_q_indices:
+                y_pos = current_y
+                for idx in left_q_indices:
+                    q = questions[idx]
+                    tracker.add_position(q['id'], left_col_x, y_pos, current_page)
+                    y_pos = self._draw_single_question_two_col_v3(
+                        c, q, left_col_x, y_pos, line_height, font_size, col_width, idx + 1
+                    )
+                    y_pos -= 25
+                    if idx != left_q_indices[-1]:
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.setLineWidth(0.5)
+                        c.line(left_col_x, y_pos + 12, left_col_x + col_width, y_pos + 12)
+                        c.setStrokeColor(black)
+            
+            if right_q_indices:
+                y_pos = current_y
+                for idx in right_q_indices:
+                    q = questions[idx]
+                    tracker.add_position(q['id'], right_col_x, y_pos, current_page)
+                    y_pos = self._draw_single_question_two_col_v3(
+                        c, q, right_col_x, y_pos, line_height, font_size, col_width, idx + 1
+                    )
+                    y_pos -= 25
+                    if idx != right_q_indices[-1]:
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.setLineWidth(0.5)
+                        c.line(right_col_x, y_pos + 12, right_col_x + col_width, y_pos + 12)
+                        c.setStrokeColor(black)
+            
+            if right_q_indices:
+                q_index = right_q_indices[-1] + 1
+            elif left_q_indices:
+                q_index = left_q_indices[-1] + 1
+            else:
+                q_index = temp_index if temp_index > q_index else q_index + 1
+
+    def _draw_question_standard_with_positions(self, c, questions, margin_left, margin_right, width, height,
+                                            line_height, font_size, available_width, start_y, tracker, page_bottom_margin=40):
+        current_y = start_y
+        current_page = 1
+        
+        for q in questions:
+            needed_height = self._estimate_question_height(q, line_height, font_size, available_width)
+            
+            if current_y - needed_height < page_bottom_margin:
+                c.showPage()
+                current_page += 1
+                current_y = height - 80
+                c.setFont("Helvetica", font_size)
+            
+            tracker.add_position(q['id'], margin_left, current_y, current_page)
+            
+            current_y = self._draw_single_question_standard(
+                c, q, margin_left, current_y, line_height, font_size, available_width
+            )
+            
+            current_y -= line_height
+            c.line(margin_left, current_y + 10, width - margin_right, current_y + 10)
+            current_y -= 10
 
     def on_type_changed(self, index):
         for i in reversed(range(self.dynamic_layout.count())):
@@ -2232,15 +2803,13 @@ class GeneratorApp(QMainWindow):
 
     def apply_style(self):
         self.setStyleSheet("""
-            /* 전체 배경 */
             QWidget {
                 background-color: #1e1e1e;
                 font-family: 'Segoe UI', 'Malgun Gothic', Arial;
-                font-size: 12px;  /* 기본 폰트 크기 */
+                font-size: 12px;
                 color: #e0e0e0;
             }
 
-            /* 카드 스타일 */
             QFrame#card, QWidget#card {
                 background: #2d2d2d;
                 border-radius: 16px;
@@ -2248,7 +2817,6 @@ class GeneratorApp(QMainWindow):
                 border: 1px solid #3d3d3d;
             }
 
-            /* Title - 가장 크게 (18px) */
             QLabel#title {
                 font-size: 18px;
                 font-weight: bold;
@@ -2258,13 +2826,11 @@ class GeneratorApp(QMainWindow):
                 padding-bottom: 8px;
             }
             
-            /* 일반 Label - 적당한 크기 (12px) */
             QLabel {
                 font-size: 12px;
                 color: #e0e0e0;
             }
 
-            /* GroupBox */
             QGroupBox {
                 font-weight: bold;
                 font-size: 12px;
@@ -2283,7 +2849,6 @@ class GeneratorApp(QMainWindow):
                 font-size: 12px;
             }
 
-            /* 버튼 - 약간 크게 (13px) */
             QPushButton {
                 background-color: #0d7377;
                 color: white;
@@ -2303,32 +2868,6 @@ class GeneratorApp(QMainWindow):
                 background-color: #0a5a5e;
             }
 
-            /* 데이터베이스 버튼 스타일 */
-            QPushButton#db_load {
-                background-color: #007acc;
-                font-size: 13px;
-            }
-            QPushButton#db_load:hover {
-                background-color: #005a9e;
-            }
-            
-            QPushButton#db_save {
-                background-color: #28a745;
-                font-size: 13px;
-            }
-            QPushButton#db_save:hover {
-                background-color: #218838;
-            }
-            
-            QPushButton#clear_all {
-                background-color: #dc3545;
-                font-size: 13px;
-            }
-            QPushButton#clear_all:hover {
-                background-color: #c82333;
-            }
-
-            /* 텍스트 입력 필드 */
             QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
                 border: 1px solid #3d3d3d;
                 border-radius: 8px;
@@ -2354,7 +2893,7 @@ class GeneratorApp(QMainWindow):
             QComboBox {
                 font-size: 12px;
             }
-            /* 드롭다운 버튼 (화살표 부분) 스타일 */
+            
             QComboBox::drop-down {
                 border: none;
                 width: 30px;
@@ -2362,15 +2901,13 @@ class GeneratorApp(QMainWindow):
                 border-radius: 0 8px 8px 0;
             }
 
-            /* 드롭다운 버튼 내부 화살표 아이콘 */
             QComboBox::down-arrow {
                 width: 12px;
                 height: 12px;
-                background-color: #007acc;  /* 파란색 화살표 배경 */
+                background-color: #007acc;
                 border-radius: 2px;
             }
 
-            /* ===== 리스트 위젯 - 폰트 크기 강제 적용 ===== */
             QListWidget, QListView, QAbstractItemView {
                 border: 1px solid #3d3d3d;
                 border-radius: 8px;
@@ -2402,12 +2939,10 @@ class GeneratorApp(QMainWindow):
                 font-size: 12px;
             }
             
-            /* QListWidget 내 모든 텍스트에 강제 적용 */
             QListWidget * {
                 font-size: 12px;
             }
 
-            /* 체크박스 */
             QCheckBox {
                 spacing: 8px;
                 font-size: 12px;
@@ -2427,7 +2962,6 @@ class GeneratorApp(QMainWindow):
                 border: 1px solid #007acc;
             }
 
-            /* 탭 위젯 스타일 */
             QTabWidget::pane {
                 border: 1px solid #3d3d3d;
                 border-radius: 8px;
@@ -2452,7 +2986,6 @@ class GeneratorApp(QMainWindow):
                 background-color: #3d3d3d;
             }
 
-            /* 스크롤바 */
             QScrollBar:vertical {
                 background-color: #252526;
                 width: 12px;
@@ -2493,7 +3026,6 @@ class GeneratorApp(QMainWindow):
                 width: 0px;
             }
 
-            /* 다이얼로그 */
             QDialog {
                 background-color: #2d2d2d;
             }
@@ -2507,7 +3039,6 @@ class GeneratorApp(QMainWindow):
                 font-size: 13px;
             }
             
-            /* Tree Widget (Database Browser 등) */
             QTreeWidget {
                 font-size: 12px;
             }
@@ -2516,7 +3047,6 @@ class GeneratorApp(QMainWindow):
                 font-size: 12px;
             }
             
-            /* Table Widget */
             QTableWidget {
                 font-size: 12px;
             }
@@ -2525,23 +3055,19 @@ class GeneratorApp(QMainWindow):
                 font-size: 12px;
             }
             
-            /* SpinBox 내부 텍스트 */
             QSpinBox, QDoubleSpinBox {
                 font-size: 12px;
             }
             
-            /* TextEdit 내부 텍스트 */
             QTextEdit {
                 font-size: 12px;
             }
             
-            /* LineEdit 내부 텍스트 */
             QLineEdit {
                 font-size: 12px;
             }
         """)
 
-        # Database 버튼들에 objectName 설정
         self.load_db_btn.setObjectName("db_load")
         self.save_db_btn.setObjectName("db_save")
         self.clear_all_btn.setObjectName("clear_all")
@@ -2566,6 +3092,9 @@ class GeneratorApp(QMainWindow):
             QMessageBox.warning(self, "Notice", "Please select a question to edit.")
             return
         
+        # 미리보기 타이머 일시 중지
+        self.preview_timer.stop()
+
         q = self.questions[current_row]
         self.edit_index = current_row
         
@@ -2616,6 +3145,9 @@ class GeneratorApp(QMainWindow):
                 break
         
         QMessageBox.information(self, "Edit Mode", f"Editing Q{q['id']}. Click 'Update Question' to save changes.")
+
+        # 미리보기 타이머 재시작 (즉시 업데이트하지 않고 대기)
+        self.preview_timer.start(800)
     
     def update_question(self):
         if not hasattr(self, 'edit_index'):
@@ -2695,14 +3227,11 @@ class GeneratorApp(QMainWindow):
 
     def update_list_display(self):
         self.list_widget.clear()
-        # font = QFont()
-        # font.setPointSize(12)  # 적당한 크기 (12pt)
         
         for idx, q in enumerate(self.questions):
             qinfo = QUESTION_TYPES.get(q["type"], {})
             icon = qinfo.get("icon", "❓")
             
-            # 텍스트를 더 읽기 쉽게 구성
             q_text_preview = q['text'][:60]
             if len(q['text']) > 60:
                 q_text_preview += "..."
@@ -2714,8 +3243,6 @@ class GeneratorApp(QMainWindow):
             display_text = f"{icon} Q{q['id']}. {q_text_preview}{option_info} ({q['score']} pts) - {q.get('difficulty', 'Medium')}"
             
             item = QListWidgetItem(display_text)
-            # 폰트 직접 설정 (스타일시트보다 우선 적용됨)
-            # item.setFont(font)
             self.list_widget.addItem(item)
 
     def delete_question(self):
@@ -2876,480 +3403,6 @@ class GeneratorApp(QMainWindow):
             QMessageBox.information(self, "Success", f"Exam PDF has been created.\n{file_path}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create PDF: {str(e)}")
-
-    def export_answer_sheet(self):
-        if not self.questions:
-            QMessageBox.warning(self, "Notice", "Please add questions first.")
-            return
-
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Answer Sheet PDF", "", "PDF (*.pdf)")
-        if not file_path:
-            return
-
-        page_size = PAGE_SIZES.get(self.settings.get('page_size', 'A4'), A4)
-        margin = self.settings.get('margin', 50) * mm
-        line_height = int(self.settings.get('line_spacing', 1.5) * self.settings.get('font_size', 11))
-        
-        c = canvas.Canvas(file_path, pagesize=page_size)
-        width, height = page_size
-
-        c.setFont("Helvetica-Bold", 20)
-        c.drawCentredString(width/2, height - 50, "ANSWER SHEET")
-        c.setFont("Helvetica", 10)
-        c.drawCentredString(width/2, height - 75, f"{self.settings.get('exam_title', 'Exam')}")
-
-        y = height - 120
-        
-        # Student info on answer sheet
-        if self.settings.get('include_student_info', True):
-            c.setFont("Helvetica", 10)
-            name = self.settings.get('student_name', '') or "_________________________"
-            student_id = self.settings.get('student_id', '') or "_________________________"
-            dept = self.settings.get('department', '') or "_________________________"
-            instructor = self.settings.get('instructor', '') or "_________________________"
-            
-            c.drawString(margin, y, f"Name: {name}")
-            c.drawString(margin + 250, y, f"Student ID: {student_id}")
-            y -= 20
-            c.drawString(margin, y, f"Department: {dept}")
-            c.drawString(margin + 250, y, f"Instructor: {instructor}")
-            y -= 40
-        else:
-            y -= 20
-
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(margin, y, "Write your answers below.")
-        y -= line_height * 2
-
-        c.setFont("Helvetica", 11)
-        for q in self.questions:
-            if y < margin + 50:
-                c.showPage()
-                y = height - margin
-                c.setFont("Helvetica", 11)
-
-            if q["type"] == 0:
-                c.drawString(margin, y, f"Q{q['id']}.   (   )")
-            elif q["type"] == 1:
-                c.drawString(margin, y, f"Q{q['id']}.   (   )")
-            elif q["type"] == 2:
-                blank_count = len(q.get("blanks", [])) or 3
-                blanks = " ______ " * blank_count
-                c.drawString(margin, y, f"Q{q['id']}.   {blanks}")
-            elif q["type"] in [3, 7, 8]:
-                c.drawString(margin, y, f"Q{q['id']}.   ____________________")
-            elif q["type"] == 4:
-                c.drawString(margin, y, f"Q{q['id']}.")
-                for _ in range(self.settings.get('essay_lines', 4)):
-                    y -= line_height
-                    c.line(margin, y, width - margin, y)
-            elif q["type"] == 5:
-                c.drawString(margin, y, f"Q{q['id']}.   1:__  2:__  3:__")
-            elif q["type"] == 6:
-                c.drawString(margin, y, f"Q{q['id']}.   ___ , ___ , ___ , ___")
-            y -= line_height
-
-        c.save()
-        QMessageBox.information(self, "Success", f"Answer Sheet PDF has been created.\n{file_path}")
-    
-    def export_answer_key_with_positions(self):
-        """정답 키와 문제 위치 정보를 JSON 파일로 내보내기"""
-        if not self.questions:
-            QMessageBox.warning(self, "Notice", "No questions to export.")
-            return
-        
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Save Answer Key with Positions", 
-            "", 
-            "JSON Files (*.json)"
-        )
-        if not file_path:
-            return
-        
-        try:
-            # PDF 생성하여 위치 정보 수집
-            temp_dir = tempfile.gettempdir()
-            temp_pdf = os.path.join(temp_dir, f"temp_positions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
-            
-            # 위치 정보를 저장할 리스트
-            position_data = []
-            
-            # PDF 생성하면서 위치 정보 수집
-            self._generate_pdf_with_positions(temp_pdf, position_data)
-            
-            # 정답 정보 구성
-            answer_key = {
-                "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
-                "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
-                "total_questions": len(self.questions),
-                "total_points": sum(q.get('score', 0) for q in self.questions),
-                "generated_at": datetime.now().isoformat(),
-                "answers": []
-            }
-            
-            for i, q in enumerate(self.questions):
-                q_info = {
-                    "question_id": q['id'],
-                    "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
-                    "score": q.get('score', 5),
-                    "answer": self._get_answer_text(q),
-                    "expected_answer": self._get_expected_answer(q),
-                    "position": position_data[i] if i < len(position_data) else None
-                }
-                answer_key["answers"].append(q_info)
-            
-            # JSON 파일 저장
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(answer_key, f, ensure_ascii=False, indent=2)
-            
-            # 임시 PDF 삭제
-            if os.path.exists(temp_pdf):
-                os.remove(temp_pdf)
-            
-            QMessageBox.information(
-                self, 
-                "Success", 
-                f"Answer key with positions has been saved.\n{file_path}\n\n"
-                f"Total: {len(self.questions)} questions, {answer_key['total_points']} points"
-            )
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to export answer key: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
-    def _get_answer_text(self, q):
-        """문제의 정답 텍스트 반환"""
-        qtype = q['type']
-        
-        if qtype == 0:  # Multiple Choice
-            answer = q.get('answer', '')
-            # 선택지에서 정답 매칭
-            choices = q.get('choices', [])
-            if answer and choices:
-                for i, choice in enumerate(choices):
-                    if answer.lower() in choice.lower() or chr(65+i) == answer.upper():
-                        return f"{chr(65+i)}. {choice}"
-            return answer or "Not specified"
-        
-        elif qtype == 1:  # True/False
-            answer = q.get('answer', '')
-            return "True" if answer.lower() in ['true', 't', 'o'] else "False"
-        
-        elif qtype == 2:  # Fill in Blank
-            blanks = q.get('blanks', [])
-            answer = q.get('answer', '')
-            if blanks:
-                return ", ".join(blanks)
-            return answer or "Not specified"
-        
-        elif qtype == 3:  # Short Answer
-            return q.get('answer', 'Not specified')
-        
-        elif qtype == 4:  # Essay
-            return "Essay - Manual grading required"
-        
-        elif qtype == 5:  # Matching
-            pairs = q.get('matching_pairs', [])
-            if pairs:
-                matches = [f"{left} → {right}" for left, right in pairs]
-                return "; ".join(matches)
-            return q.get('answer', 'Not specified')
-        
-        elif qtype == 6:  # Ordering
-            items = q.get('ordering_items', [])
-            if items:
-                return " → ".join(items)
-            return q.get('answer', 'Not specified')
-        
-        elif qtype == 7:  # Code
-            code = q.get('code_template', '')
-            if code:
-                return f"Expected output/implementation:\n{code[:200]}"
-            return q.get('answer', 'Manual grading required')
-        
-        elif qtype == 8:  # Calculation
-            formula = q.get('formula', '')
-            if formula:
-                return f"Formula: {formula}\nAnswer: {q.get('answer', 'Not specified')}"
-            return q.get('answer', 'Not specified')
-        
-        else:
-            return q.get('answer', 'Not specified')
-
-    def _get_expected_answer(self, q):
-        """채점용 간단한 정답 문자열 반환"""
-        qtype = q['type']
-        
-        if qtype == 0:  # Multiple Choice
-            answer = q.get('answer', '')
-            choices = q.get('choices', [])
-            if answer and choices:
-                for i, choice in enumerate(choices):
-                    if answer.lower() in choice.lower():
-                        return chr(65+i)
-                    if answer.upper() == chr(65+i):
-                        return answer.upper()
-            return answer.upper() if answer else "?"
-        
-        elif qtype == 1:  # True/False
-            answer = q.get('answer', '')
-            return "T" if answer.lower() in ['true', 't', 'o'] else "F"
-        
-        elif qtype == 2:  # Fill in Blank
-            blanks = q.get('blanks', [])
-            return ", ".join(blanks) if blanks else q.get('answer', '')
-        
-        elif qtype == 3:  # Short Answer
-            return q.get('answer', '')
-        
-        elif qtype == 4:  # Essay
-            return "[ESSAY]"
-        
-        elif qtype == 5:  # Matching
-            pairs = q.get('matching_pairs', [])
-            if pairs:
-                # 수정: i 변수 대신 enumerate 사용
-                match_list = []
-                for idx, (left, right) in enumerate(pairs):
-                    # 정답 형식: "1-A, 2-B, 3-C"
-                    match_list.append(f"{idx+1}-{chr(65+idx) if idx < 26 else idx}")
-                return "; ".join(match_list)
-            return q.get('answer', '')
-        
-        elif qtype == 6:  # Ordering
-            return " > ".join([str(i+1) for i in range(len(q.get('ordering_items', [])))])
-        
-        else:
-            return q.get('answer', '')
-
-    def _generate_pdf_with_positions(self, file_path, position_data):
-        """PDF 생성하면서 문제 위치 정보 수집"""
-        exam_title = self.settings.get('exam_title', 'Untitled Exam') or "Untitled Exam"
-        exam_date = self.settings.get('exam_date', '') or datetime.now().strftime("%B %d, %Y")
-        
-        page_size = PAGE_SIZES.get(self.settings.get('page_size', 'A4'), A4)
-        
-        c = canvas.Canvas(file_path, pagesize=page_size)
-        width, height = page_size
-        
-        # 위치 추적을 위한 더미 캔버스 (좌표 기록용)
-        class PositionTracker:
-            def __init__(self):
-                self.positions = []
-                self.current_page = 0
-                self.current_x = 0
-                self.current_y = 0
-            
-            def add_position(self, q_id, x, y, page):
-                self.positions.append({
-                    'question_id': q_id,
-                    'page': page,
-                    'x': x,
-                    'y': y
-                })
-        
-        tracker = PositionTracker()
-        
-        margin_top = 25 * mm
-        margin_bottom = 15 * mm
-        margin_left = 20 * mm
-        margin_right = 20 * mm
-        
-        available_width = width - margin_left - margin_right
-        
-        line_height = int(self.settings.get('line_spacing', 1.5) * self.settings.get('font_size', 11))
-        layout_style = self.settings.get('layout_style', 'Two Column')
-        font_size = self.settings.get('font_size', 11)
-        title_font_size = self.settings.get('title_font_size', 18)
-        
-        # ===== 헤더 영역 =====
-        current_y = height - margin_top
-        current_page = 1
-        
-        # 시험 제목
-        c.setFont("Helvetica-Bold", title_font_size)
-        c.drawCentredString(width/2, current_y, exam_title)
-        current_y -= 22
-        
-        # 날짜 및 QR 코드, 총점 표시
-        c.setFont("Helvetica", 10)
-        total_points = sum(q.get('score', 0) for q in self.questions)
-        
-        if self.settings.get('show_qr', True):
-            qr_data = json.dumps({
-                "exam": exam_title,
-                "date": exam_date,
-                "questions": len(self.questions),
-                "total_score": total_points
-            })
-            qr_path = generate_qr(qr_data, f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-            c.drawImage(qr_path, margin_left, current_y - 15, width=35, height=35)
-            if os.path.exists(qr_path):
-                os.remove(qr_path)
-            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
-        else:
-            c.drawRightString(width - margin_right, current_y, f"Total: {total_points} pts")
-        
-        current_y -= 18
-        
-        # 시험지 설명
-        instruction = self.settings.get('exam_instruction', '')
-        if instruction:
-            c.setFont("Helvetica-Oblique", 9)
-            instruction_lines = self._wrap_text(instruction, available_width - 20, 9)
-            for line in instruction_lines:
-                c.drawString(margin_left, current_y, f"※ {line}")
-                current_y -= line_height - 4
-            current_y -= 8
-        
-        # 구분선
-        c.line(margin_left, current_y, width - margin_right, current_y)
-        current_y -= 15
-        current_y -= 15
-        
-        # ===== 질문 영역 (위치 정보 수집 포함) =====
-        if layout_style == "Two Column":
-            self._draw_question_two_column_with_positions(
-                c, self.questions, margin_left, margin_right, 
-                width, height, line_height, font_size, 
-                available_width, current_y, tracker
-            )
-        else:
-            self._draw_question_standard_with_positions(
-                c, self.questions, margin_left, margin_right, width, height,
-                line_height, font_size, available_width, current_y, tracker, 40
-            )
-        
-        c.save()
-        
-        # 위치 정보 저장
-        for idx, pos in enumerate(tracker.positions):
-            position_data.append(pos)
-
-    def _draw_question_two_column_with_positions(self, c, questions, margin_left, margin_right, 
-                                                width, height, line_height, font_size, 
-                                                available_width, start_y, tracker):
-        """Two column 레이아웃으로 질문 표시 (위치 정보 수집)"""
-        col_gap = 15
-        col_width = (available_width - col_gap) // 2
-        
-        left_col_x = margin_left
-        right_col_x = margin_left + col_width + col_gap
-        
-        page_bottom_margin = 25
-        current_page = 1
-        
-        current_y = start_y
-        q_index = 0
-        total_questions = len(questions)
-        
-        while q_index < total_questions:
-            if q_index > 0:
-                c.showPage()
-                current_page += 1
-                current_y = height - 35
-            
-            # 왼쪽 컬럼
-            left_y = current_y
-            left_q_indices = []
-            
-            temp_index = q_index
-            while temp_index < total_questions:
-                q = questions[temp_index]
-                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
-                
-                if left_y - q_height > page_bottom_margin:
-                    left_q_indices.append(temp_index)
-                    left_y -= q_height
-                    temp_index += 1
-                else:
-                    break
-            
-            # 오른쪽 컬럼
-            right_q_indices = []
-            right_y = current_y
-            
-            temp_index2 = temp_index
-            while temp_index2 < total_questions:
-                q = questions[temp_index2]
-                q_height = self._estimate_question_height_two_col_v2(q, line_height, font_size, col_width) + 15
-                
-                if right_y - q_height > page_bottom_margin:
-                    right_q_indices.append(temp_index2)
-                    right_y -= q_height
-                    temp_index2 += 1
-                else:
-                    break
-            
-            # 왼쪽 컬럼 문제 그리기 및 위치 기록
-            if left_q_indices:
-                y_pos = current_y
-                for idx in left_q_indices:
-                    q = questions[idx]
-                    # 위치 기록
-                    tracker.add_position(q['id'], left_col_x, y_pos, current_page)
-                    y_pos = self._draw_single_question_two_col_v3(
-                        c, q, left_col_x, y_pos, line_height, font_size, col_width, idx + 1
-                    )
-                    y_pos -= 25
-                    if idx != left_q_indices[-1]:
-                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
-                        c.setLineWidth(0.5)
-                        c.line(left_col_x, y_pos + 12, left_col_x + col_width, y_pos + 12)
-                        c.setStrokeColor(black)
-            
-            # 오른쪽 컬럼 문제 그리기 및 위치 기록
-            if right_q_indices:
-                y_pos = current_y
-                for idx in right_q_indices:
-                    q = questions[idx]
-                    # 위치 기록
-                    tracker.add_position(q['id'], right_col_x, y_pos, current_page)
-                    y_pos = self._draw_single_question_two_col_v3(
-                        c, q, right_col_x, y_pos, line_height, font_size, col_width, idx + 1
-                    )
-                    y_pos -= 25
-                    if idx != right_q_indices[-1]:
-                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
-                        c.setLineWidth(0.5)
-                        c.line(right_col_x, y_pos + 12, right_col_x + col_width, y_pos + 12)
-                        c.setStrokeColor(black)
-            
-            # 다음 페이지로 이동
-            if right_q_indices:
-                q_index = right_q_indices[-1] + 1
-            elif left_q_indices:
-                q_index = left_q_indices[-1] + 1
-            else:
-                q_index = temp_index if temp_index > q_index else q_index + 1
-
-    def _draw_question_standard_with_positions(self, c, questions, margin_left, margin_right, width, height,
-                                            line_height, font_size, available_width, start_y, tracker, page_bottom_margin=40):
-        """표준 레이아웃으로 질문 표시 (위치 정보 수집)"""
-        current_y = start_y
-        current_page = 1
-        
-        for q in questions:
-            needed_height = self._estimate_question_height(q, line_height, font_size, available_width)
-            
-            if current_y - needed_height < page_bottom_margin:
-                c.showPage()
-                current_page += 1
-                current_y = height - 80
-                c.setFont("Helvetica", font_size)
-            
-            # 위치 기록
-            tracker.add_position(q['id'], margin_left, current_y, current_page)
-            
-            current_y = self._draw_single_question_standard(
-                c, q, margin_left, current_y, line_height, font_size, available_width
-            )
-            
-            current_y -= line_height
-            c.line(margin_left, current_y + 10, width - margin_right, current_y + 10)
-            current_y -= 10
 
 
 if __name__ == "__main__":
