@@ -207,22 +207,30 @@ class ScoringEngine:
         return 0.0, f"Incorrect. Correct answer: {correct}"
     
     def _grade_true_false(self, student: str, correct: str, 
-                          max_score: int, qid: int) -> Tuple[float, str]:
-        """참/거짓 채점"""
-        # T/F 매핑
-        true_variants = {'T', 'TRUE', 'O', '○', 'YES', 'Y'}
-        false_variants = {'F', 'FALSE', 'X', '×', 'NO', 'N'}
+                      max_score: int, qid: int) -> Tuple[float, str]:
+        """참/거짓 채점 - a(True), b(False) 비교"""
+        # student와 correct 모두 'a' 또는 'b' 형태여야 함
+        if student == correct:
+            return float(max_score), "Correct"
         
-        student_upper = student.upper()
-        correct_upper = correct.upper()
+        # 'a'와 'b'는 각각 True/False 의미
+        # 혹시 모를 다른 형식 처리
+        student_norm = self._normalize_tf(student)
+        correct_norm = self._normalize_tf(correct)
         
-        student_bool = student_upper in true_variants if correct_upper in true_variants else student_upper in false_variants
-        correct_bool = correct_upper in true_variants
-        
-        if student_bool == correct_bool:
+        if student_norm == correct_norm:
             return float(max_score), "Correct"
         
         return 0.0, f"Incorrect. Correct answer: {correct}"
+    
+    def _normalize_tf(self, answer: str) -> str:
+        """True/False 답안 정규화 (a/b 반환)"""
+        answer = answer.strip().upper()
+        if answer in ['A', 'TRUE', 'T', 'O', '○', '1']:
+            return 'A'
+        if answer in ['B', 'FALSE', 'F', 'X', '×', '0']:
+            return 'B'
+        return answer
     
     def _grade_fill_blank(self, student: str, correct: str, 
                           max_score: int, qid: int) -> Tuple[float, str]:

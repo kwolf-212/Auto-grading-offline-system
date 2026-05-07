@@ -189,19 +189,84 @@ class AnswerParser:
             if not line:
                 continue
             
-            # 각 패턴에 대해 매칭 시도
-            for pattern in self.answer_patterns:
-                match = pattern.match(line)
-                if match:
-                    qid = int(match.group(1))
-                    raw_answer = match.group(2).strip()
-                    answer = self._normalize_answer(raw_answer)
-                    
-                    if answer:
+            # ===== 패턴 1: Qn. [a] (가장 중요! 객관식/TrueFalse 모두 이 패턴 사용) =====
+            bracket_match = re.search(r'Q(\d+)\.\s*\[([a-z])\]', line, re.IGNORECASE)
+            if bracket_match:
+                qid = int(bracket_match.group(1))
+                answers[qid] = bracket_match.group(2).lower()  # 'a', 'b', 'c'...
+                continue
+            
+            # ===== 패턴 2: Qn. a =====
+            q_match = re.search(r'Q(\d+)\.\s*([A-Za-z]+)', line, re.IGNORECASE)
+            if q_match:
+                qid = int(q_match.group(1))
+                answer = q_match.group(2).lower()
+                # True/False 문제인 경우 a/b로 변환
+                if answer in ['true', 't', 'o', '○']:
+                    answers[qid] = 'a'
+                elif answer in ['false', 'f', 'x', '×']:
+                    answers[qid] = 'b'
+                else:
+                    answers[qid] = answer.upper()
+                continue
+            
+            # ===== 패턴 3: n. a (숫자. 알파벳) =====
+            num_match = re.match(r'^(\d+)[\.\):]\s*([A-Za-z]+)', line)
+            if num_match:
+                qid = int(num_match.group(1))
+                answer = num_match.group(2).lower()
+                if answer in ['true', 't', 'o', '○']:
+                    answers[qid] = 'a'
+                elif answer in ['false', 'f', 'x', '×']:
+                    answers[qid] = 'b'
+                else:
+                    answers[qid] = answer.upper()
+                continue
+            
+            # ===== 패턴 4: Correct order (순서 문제) =====
+            order_match = re.search(r'Correct order:\s*([\d,\s]+)', line, re.IGNORECASE)
+            if order_match:
+                order_str = order_match.group(1)
+                order_items = re.findall(r'\d+', order_str)
+                if order_items:
+                    # 문제 ID를 찾아서 할당 (보통 20, 21번)
+                    for qid in self.question_ids:
+                        if qid not in answers and qid >= 20:
+                            answers[qid] = ','.join(order_items)
+                            break
+                continue
+            
+            # ===== 패턴 5: Matching (짝짓기 문제) =====
+            matching_pairs = re.findall(r'(\d+)[→-]([a-z])', line, re.IGNORECASE)
+            if matching_pairs:
+                matching_str = ';'.join([f"{p[0]}-{p[1].upper()}" for p in matching_pairs])
+                for qid in self.question_ids:
+                    if qid not in answers and 18 <= qid <= 19:
+                        answers[qid] = matching_str
+                        break
+                continue
+            
+            # ===== 패턴 6: Answer: X (계산 문제 답) =====
+            ans_match = re.search(r'Answer:\s*([A-Za-z0-9\.\-]+)', line, re.IGNORECASE)
+            if ans_match:
+                answer = ans_match.group(1).upper()
+                for qid in self.question_ids:
+                    if qid not in answers:
                         answers[qid] = answer
-                    break
+                        break
+                continue
         
-        # 빈 칸 형태의 답안도 찾기 (예: "1. ___" 형태)
+        # ===== 코드 문제 특수 처리 (def 함수명 찾기) =====
+        code_match = re.search(r'def\s+(\w+)', text, re.IGNORECASE)
+        if code_match and 22 not in answers:
+            answers[22] = code_match.group(1)
+        
+        # ===== 계산 문제 특수 처리 (Answer: 숫자) =====
+        calc_match = re.search(r'Answer:\s*(\d+(?:\.\d+)?)\s*$', text, re.MULTILINE)
+        if calc_match and 23 not in answers:
+            answers[23] = calc_match.group(1)
+        
+        # ===== 빈 칸 형태의 답안 찾기 (예: "1. ___") =====
         blank_pattern = re.compile(r'(\d+)[\.\):]\s*[\[(]?\s*[\)\]]?\s*$')
         for line in lines:
             match = blank_pattern.match(line.strip())
@@ -213,15 +278,6 @@ class AnswerParser:
         return answers
     
     def _normalize_answer(self, answer: str) -> str:
-        """
-        답안 정규화
-        
-        Args:
-            answer: 원본 답안 문자열
-        
-        Returns:
-            정규화된 답안
-        """
         answer = answer.strip().upper()
         
         # 한글/특수문자 매핑
@@ -232,11 +288,11 @@ class AnswerParser:
         if len(answer) == 1 and answer.isalpha():
             return answer
         
-        # True/False 처리
-        if answer in ['TRUE', 'T']:
-            return 'T'
-        if answer in ['FALSE', 'F']:
-            return 'F'
+        # True/False -> a/b 변환 (중요!)
+        if answer in ['TRUE', 'T', 'O', '○', '1']:
+            return 'A'   # a로 매핑
+        if answer in ['FALSE', 'F', 'X', '×', '0']:
+            return 'B'   # b로 매핑
         
         return answer
     
@@ -283,51 +339,30 @@ class AnswerValidator:
                 self.answer_types[qid] = q.get('question_type', 'unknown')
     
     def validate_answer(self, qid: int, student_answer: str) -> Tuple[bool, float]:
-        """
-        단일 답안 검증
-        
-        Args:
-            qid: 문제 ID
-            student_answer: 학생 답안
-        
-        Returns:
-            (정답 여부, 신뢰도)
-        """
         correct = self.correct_answers.get(qid, '')
-        if not correct:
-            return False, 0.0
+        qtype = self.answer_types.get(qid, 'unknown')
         
-        student_norm = self._normalize(student_answer)
-        correct_norm = self._normalize(correct)
+        # True/False는 a/b로 변환하여 비교
+        if qtype == 'True/False':
+            student_norm = self._normalize_tf(student_answer)
+            correct_norm = self._normalize_tf(correct)
+        else:
+            student_norm = self._normalize(student_answer)
+            correct_norm = self._normalize(correct)
         
-        # 정확히 일치
         if student_norm == correct_norm:
             return True, 1.0
-        
-        # 부분 일치 (단답형)
-        if self.answer_types.get(qid) in ['short_answer', 'fill_blank']:
-            if student_norm in correct_norm or correct_norm in student_norm:
-                return True, 0.7
-        
-        # 동의어 처리 (선택적)
-        if self._is_synonym(student_norm, correct_norm):
-            return True, 0.9
-        
         return False, 0.0
-    
-    def _normalize(self, answer: str) -> str:
-        """답안 정규화"""
+
+    def _normalize_tf(self, answer: str) -> str:
+        """True/False 전용 정규화 (a/b 반환)"""
         if not answer:
             return ""
-        
         answer = answer.strip().upper()
-        
-        # 공백 제거
-        answer = ' '.join(answer.split())
-        
-        # 특수문자 제거
-        answer = re.sub(r'[^\w\s]', '', answer)
-        
+        if answer in ['T', 'TRUE', 'O', '○', '1']:
+            return 'A'
+        if answer in ['F', 'FALSE', 'X', '×', '0']:
+            return 'B'
         return answer
     
     def _is_synonym(self, student: str, correct: str) -> bool:
