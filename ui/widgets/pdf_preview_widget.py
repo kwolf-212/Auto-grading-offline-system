@@ -1,8 +1,8 @@
-# ui/widgets/pdf_preview_widget.py
+# ui/widgets/pdf_preview_widget.py (개선 버전)
 import os
 import tempfile
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor
+from PyQt5.QtGui import QPixmap, QPainter, QPen, QColor, QImage
 from PyQt5.QtCore import Qt, QTimer, QRect
 
 try:
@@ -113,15 +113,18 @@ class PDFPreviewLabelEnhanced(QLabel):
 
 
 class PDFPreviewWidget(QWidget):
+    """PDF 미리보기 위젯 (시험지 생성기 및 채점기 공용)"""
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_pdf_path = None
         self.current_page = 0
         self.total_pages = 0
-        self.zoom_factor = 1.0
+        self.zoom_factor = 2.0  # 기본 줌 배율 (선명도를 위해 2.0)
         self.fit_mode = "none"
         self.original_pixmap = None
         self.saved_page = 0
+        self.is_grader_mode = False  # 채점기 모드 여부
         self.init_ui()
         self.last_scroll_pos = None
         
@@ -130,6 +133,7 @@ class PDFPreviewWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(5)
         
+        # 도구 모음
         toolbar_widget = QWidget()
         toolbar_widget.setStyleSheet("""
             QWidget {
@@ -142,6 +146,7 @@ class PDFPreviewWidget(QWidget):
         toolbar_layout.setContentsMargins(10, 5, 10, 5)
         toolbar_layout.setSpacing(8)
         
+        # 버튼 스타일
         icon_button_style = """
             QPushButton {
                 font-size: 18px;
@@ -192,7 +197,8 @@ class PDFPreviewWidget(QWidget):
             }
         """
         
-        self.zoom_value = QLabel("100%")
+        # 줌 컨트롤
+        self.zoom_value = QLabel("200%")
         self.zoom_value.setFixedWidth(55)
         self.zoom_value.setAlignment(Qt.AlignCenter)
         self.zoom_value.setStyleSheet("""
@@ -244,6 +250,7 @@ class PDFPreviewWidget(QWidget):
         separator1.setFixedSize(2, 30)
         separator1.setStyleSheet("background-color: #555;")
         
+        # 맞춤 버튼
         self.fit_width_btn = QPushButton("⬌")
         self.fit_width_btn.setToolTip("Fit to Width")
         self.fit_width_btn.setStyleSheet(icon_button_style)
@@ -265,6 +272,7 @@ class PDFPreviewWidget(QWidget):
         separator2.setFixedSize(2, 30)
         separator2.setStyleSheet("background-color: #555;")
         
+        # 페이지 탐색
         self.prev_btn = QPushButton("◀")
         self.prev_btn.setToolTip("Previous Page (←)")
         self.prev_btn.setStyleSheet("""
@@ -354,6 +362,7 @@ class PDFPreviewWidget(QWidget):
         """)
         self.refresh_btn.clicked.connect(self.refresh_preview)
         
+        # 도구 모음에 버튼 추가
         toolbar_layout.addWidget(self.zoom_out_btn)
         toolbar_layout.addWidget(self.zoom_value)
         toolbar_layout.addWidget(self.zoom_in_btn)
@@ -369,6 +378,7 @@ class PDFPreviewWidget(QWidget):
         toolbar_layout.addStretch()
         toolbar_layout.addWidget(self.refresh_btn)
         
+        # 스크롤 영역
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setAlignment(Qt.AlignCenter)
@@ -400,14 +410,49 @@ class PDFPreviewWidget(QWidget):
         self.setLayout(layout)
         self.update_navigation_buttons()
         self.preview_label.setMouseTracking(True)
-
+    
+    def set_grader_mode(self, enabled=True):
+        """채점기 모드 설정 (미리보기 전용)"""
+        self.is_grader_mode = enabled
+        if enabled:
+            self.refresh_btn.setVisible(False)  # 채점기에서는 새로고침 버튼 숨김
+    
+    def load_pdf(self, pdf_path, page_num=0):
+        """PDF 파일 로드"""
+        if not PYMUPDF_AVAILABLE:
+            self.status_label.setText("PyMuPDF not installed")
+            return False
+        
+        if not os.path.exists(pdf_path):
+            self.status_label.setText("PDF file not found")
+            return False
+        
+        self.current_pdf_path = pdf_path
+        self.current_page = page_num
+        self.total_pages = 0
+        return self.update_preview()
+    
+    def load_pdf_from_data(self, pdf_data, filename="preview.pdf"):
+        """PDF 데이터로부터 로드 (임시 파일 생성)"""
+        if not PYMUPDF_AVAILABLE:
+            return False
+        
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, f"pdf_preview_{filename}")
+        
+        with open(temp_path, 'wb') as f:
+            f.write(pdf_data)
+        
+        return self.load_pdf(temp_path)
+    
     def refresh_preview(self):
+        """미리보기 새로고침"""
         if hasattr(self.parent(), 'generate_live_preview'):
-            self.parent().generate_live_preview() 
+            self.parent().generate_live_preview()
     
     def zoom_in(self):
         current = int(self.zoom_value.text().rstrip('%'))
-        new_value = min(300, current + 10)
+        new_value = min(400, current + 10)
         self.zoom_value.setText(f"{new_value}%")
         self.zoom_factor = new_value / 100.0
         self.fit_mode = "none"
@@ -435,7 +480,7 @@ class PDFPreviewWidget(QWidget):
         if available_width > 0:
             target_width = available_width
             zoom_percent = int((target_width / self.original_pixmap.width()) * 100)
-            zoom_percent = min(300, max(30, zoom_percent))
+            zoom_percent = min(400, max(30, zoom_percent))
             self.zoom_value.setText(f"{zoom_percent}%")
             self.zoom_factor = zoom_percent / 100.0
             self.update_preview()
@@ -448,7 +493,7 @@ class PDFPreviewWidget(QWidget):
         if available_height > 0:
             target_height = available_height
             zoom_percent = int((target_height / self.original_pixmap.height()) * 100)
-            zoom_percent = min(300, max(30, zoom_percent))
+            zoom_percent = min(400, max(30, zoom_percent))
             self.zoom_value.setText(f"{zoom_percent}%")
             self.zoom_factor = zoom_percent / 100.0
             self.update_preview()
@@ -465,11 +510,15 @@ class PDFPreviewWidget(QWidget):
             height_ratio = available_height / self.original_pixmap.height()
             zoom_ratio = min(width_ratio, height_ratio)
             zoom_percent = int(zoom_ratio * 100)
-            zoom_percent = min(300, max(30, zoom_percent))
+            zoom_percent = min(400, max(30, zoom_percent))
             self.zoom_value.setText(f"{zoom_percent}%")
             self.zoom_factor = zoom_percent / 100.0
             self.update_preview()
-            
+    
+    def get_current_pixmap(self):
+        """현재 표시 중인 QPixmap 반환"""
+        return self.original_pixmap
+    
     def set_preview_image(self, pixmap):
         if pixmap and not pixmap.isNull():
             self.original_pixmap = pixmap
@@ -509,7 +558,13 @@ class PDFPreviewWidget(QWidget):
         if self.current_page < self.total_pages - 1:
             self.current_page += 1
             self.update_preview()
-            
+    
+    def go_to_page(self, page_num):
+        """특정 페이지로 이동"""
+        if 0 <= page_num < self.total_pages:
+            self.current_page = page_num
+            self.update_preview()
+    
     def wheelEvent(self, event):
         if event.modifiers() & Qt.ControlModifier:
             delta = event.angleDelta().y()
@@ -549,7 +604,7 @@ class PDFPreviewWidget(QWidget):
             
     def update_preview(self):
         if not self.current_pdf_path or not os.path.exists(self.current_pdf_path):
-            self.preview_label.setText("📄 No PDF generated yet.\n\nAdd questions and click 'Refresh' to see preview.")
+            self.preview_label.setText("📄 No PDF loaded.\n\nLoad a PDF file to preview.")
             self.status_label.setText("No PDF file available")
             self.current_page = 0
             self.total_pages = 0
@@ -578,18 +633,23 @@ class PDFPreviewWidget(QWidget):
             self.update_navigation_buttons()
             
             if self.total_pages > 0:
+                # 현재 스크롤 위치 저장
                 current_scroll = self.scroll_area.verticalScrollBar().value()
 
                 page = doc[self.current_page]
-                zoom_matrix = fitz.Matrix(2.0, 2.0)
+                # 줌 매트릭스 생성
+                zoom = self.zoom_factor
+                zoom_matrix = fitz.Matrix(zoom, zoom)
                 pix = page.get_pixmap(matrix=zoom_matrix, alpha=False)
                 
+                # QPixmap으로 변환
                 img_data = pix.tobytes("png")
                 pixmap = QPixmap()
                 pixmap.loadFromData(img_data)
                 
                 self.set_preview_image(pixmap)
                 
+                # 스크롤 위치 복원
                 if current_scroll > 0:
                     QTimer.singleShot(50, lambda: self.scroll_area.verticalScrollBar().setValue(current_scroll))
             else:
@@ -603,12 +663,7 @@ class PDFPreviewWidget(QWidget):
             self.current_page = 0
             self.total_pages = 0
             self.update_navigation_buttons()
-            
-    def load_pdf(self, pdf_path):
-        self.current_pdf_path = pdf_path
-        self.current_page = self.saved_page if hasattr(self, 'saved_page') else 0
-        self.total_pages = 0
-        self.update_preview()
 
     def save_current_page(self):
+        """현재 페이지 번호 저장"""
         self.saved_page = self.current_page
