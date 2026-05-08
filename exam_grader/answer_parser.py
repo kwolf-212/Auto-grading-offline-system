@@ -1,383 +1,593 @@
 # exam_grader/answer_parser.py
 import os
 import re
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
+import json
+from typing import Dict, Optional, Tuple, List
+from collections import defaultdict
+import fitz
+import cv2
+import numpy as np
 
 try:
-    import fitz  # PyMuPDF
-    PYMUPDF_AVAILABLE = True
-except ImportError:
-    PYMUPDF_AVAILABLE = False
-
-try:
-    from PIL import Image
     import pytesseract
+    import easyocr
+    from PIL import Image
+    import io
     TESSERACT_AVAILABLE = True
+    EASYOCR_AVAILABLE = True
 except ImportError:
     TESSERACT_AVAILABLE = False
+    EASYOCR_AVAILABLE = False
 
 
-@dataclass
-class ParsedAnswer:
-    """파싱된 답안 정보"""
-    question_id: int
-    answer: str
-    confidence: float = 1.0
-    raw_text: str = ""
-
-
-class AnswerParser:
-    """답안 파싱 엔진 - 이미지/PDF에서 답안 추출"""
+class DynamicQuestionDetector:
+    """PDF에서 문제 위치를 동적으로 찾는 검출기
+    - tmp.py의 로직 기반: EasyOCR + JSON 앵커 + 보간법 + 레이아웃 점수
+    - 이미지 좌표계 기반 처리
+    - 순차적 영역 생성 (다음 문제 위치 기준)
+    """
     
-    def __init__(self, exam_data: Dict = None):
-        """
-        Args:
-            exam_data: 시험 데이터 (질문 수, 유형 정보 등)
-        """
-        self.exam_data = exam_data or {}
-        self.total_questions = len(self.exam_data.get('answers', []))
+    def __init__(self, use_ocr: bool = True, dpi: int = 200):
+        self.use_ocr = use_ocr and TESSERACT_AVAILABLE
+        self.dpi = dpi
+        self.question_regions = {}
         
-        # 답안 패턴
-        self.answer_patterns = [
-            # 1. A 또는 1) A 형태
-            re.compile(r'^(\d+)[\.\):]\s*([A-Za-z]|True|False|○|×|✓|✗)', re.IGNORECASE),
-            # 2. Q1. A 또는 Q1: A 형태
-            re.compile(r'^Q\.?(\d+)[\.\):]\s*([A-Za-z]|True|False)', re.IGNORECASE),
-            # 3. 문제1. A 형태 (한글)
-            re.compile(r'^문제\s*(\d+)[\.\):]\s*([A-Za-z]|True|False)', re.IGNORECASE),
-            # 4. 1번: A 형태 (한글)
-            re.compile(r'^(\d+)번[\.\):]\s*([A-Za-z]|True|False)', re.IGNORECASE),
-            # 5. 답: 1-A 형태
-            re.compile(r'^답\s*:?\s*(\d+)[-\.]?\s*([A-Za-z])', re.IGNORECASE),
-            # 6. 1) (A) 형태
-            re.compile(r'^(\d+)\)\s*\(?([A-Za-z])\)?', re.IGNORECASE),
-        ]
+        # 문제 패턴 (Q1, 1., Q1. 등)
+        self.question_pattern = r'[QO0][\s]*([0-9]{1,2})[\.\,:]?'
         
-        # 한글/특수문자 매핑
-        self.korean_mapping = {
-            '가': 'A', '나': 'B', '다': 'C', '라': 'D', '마': 'E',
-            '①': 'A', '②': 'B', '③': 'C', '④': 'D', '⑤': 'E',
-            '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E',
-            '○': 'O', '×': 'X', '✓': 'O', '✗': 'X',
-            'True': 'T', 'False': 'F', 'true': 'T', 'false': 'F',
-        }
-    
-    def parse_from_image(self, image_path: str, preprocess: bool = True) -> Dict[int, str]:
-        """
-        이미지에서 답안 추출
+        # EasyOCR 초기화
+        self.reader = None
+        if EASYOCR_AVAILABLE and use_ocr:
+            try:
+                self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+                print("✅ EasyOCR initialized")
+            except Exception as e:
+                print(f"⚠️ EasyOCR init failed: {e}")
         
-        Args:
-            image_path: 이미지 파일 경로
-            preprocess: 전처리 수행 여부
-        
-        Returns:
-            question_id -> answer 매핑
-        """
-        if not TESSERACT_AVAILABLE:
-            raise ImportError(
-                "Pillow and pytesseract are required for OCR.\n"
-                "Install with: pip install Pillow pytesseract\n"
-                "Also install Tesseract OCR engine from: https://github.com/tesseract-ocr/tesseract"
-            )
-        
-        try:
-            # 이미지 로드
-            image = Image.open(image_path)
-            
-            # 이미지 전처리
-            if preprocess:
-                image = self._preprocess_image(image)
-            
-            # OCR 수행
-            # 여러 언어 지원 (영어 + 한국어)
-            text = pytesseract.image_to_string(image, lang='eng+kor')
-            
-            # 답안 파싱
-            answers = self._parse_answers_from_text(text)
-            
-            return answers
-            
-        except Exception as e:
-            raise Exception(f"Failed to parse image: {str(e)}")
-    
-    def parse_from_pdf(self, pdf_path: str, page_num: int = 0) -> Dict[int, str]:
-        """
-        PDF에서 답안 추출
-        
-        Args:
-            pdf_path: PDF 파일 경로
-            page_num: 페이지 번호 (0부터 시작)
-        
-        Returns:
-            question_id -> answer 매핑
-        """
-        if not PYMUPDF_AVAILABLE:
-            raise ImportError(
-                "PyMuPDF is required for PDF parsing.\n"
-                "Install with: pip install PyMuPDF"
-            )
-        
-        try:
-            doc = fitz.open(pdf_path)
-            
-            if page_num >= len(doc):
-                page_num = 0
-            
-            page = doc[page_num]
-            text = page.get_text()
-            doc.close()
-            
-            answers = self._parse_answers_from_text(text)
-            return answers
-            
-        except Exception as e:
-            raise Exception(f"Failed to parse PDF: {str(e)}")
-    
-    def parse_from_text(self, text: str) -> Dict[int, str]:
-        """
-        텍스트에서 답안 추출
-        
-        Args:
-            text: 텍스트 문자열
-        
-        Returns:
-            question_id -> answer 매핑
-        """
-        return self._parse_answers_from_text(text)
-    
-    def _preprocess_image(self, image: Image.Image) -> Image.Image:
-        """
-        이미지 전처리 (OCR 정확도 향상)
-        
-        Args:
-            image: PIL Image 객체
-        
-        Returns:
-            전처리된 이미지
-        """
-        # Grayscale 변환
-        if image.mode != 'L':
-            image = image.convert('L')
-        
-        # 대비 향상
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Contrast(image)
-        image = enhancer.enhance(2.0)
-        
-        # 이진화 (threshold)
-        threshold = 128
-        image = image.point(lambda p: 255 if p > threshold else 0)
-        
-        return image
-    
-    def _parse_answers_from_text(self, text: str) -> Dict[int, str]:
-        """
-        텍스트에서 답안 파싱
-        
-        Args:
-            text: OCR 또는 추출된 텍스트
-        
-        Returns:
-            question_id -> answer 매핑
-        """
-        answers = {}
-        lines = text.split('\n')
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            
-            # ===== 패턴 1: Qn. [a] (가장 중요! 객관식/TrueFalse 모두 이 패턴 사용) =====
-            bracket_match = re.search(r'Q(\d+)\.\s*\[([a-z])\]', line, re.IGNORECASE)
-            if bracket_match:
-                qid = int(bracket_match.group(1))
-                answers[qid] = bracket_match.group(2).lower()  # 'a', 'b', 'c'...
-                continue
-            
-            # ===== 패턴 2: Qn. a =====
-            q_match = re.search(r'Q(\d+)\.\s*([A-Za-z]+)', line, re.IGNORECASE)
-            if q_match:
-                qid = int(q_match.group(1))
-                answer = q_match.group(2).lower()
-                # True/False 문제인 경우 a/b로 변환
-                if answer in ['true', 't', 'o', '○']:
-                    answers[qid] = 'a'
-                elif answer in ['false', 'f', 'x', '×']:
-                    answers[qid] = 'b'
-                else:
-                    answers[qid] = answer.upper()
-                continue
-            
-            # ===== 패턴 3: n. a (숫자. 알파벳) =====
-            num_match = re.match(r'^(\d+)[\.\):]\s*([A-Za-z]+)', line)
-            if num_match:
-                qid = int(num_match.group(1))
-                answer = num_match.group(2).lower()
-                if answer in ['true', 't', 'o', '○']:
-                    answers[qid] = 'a'
-                elif answer in ['false', 'f', 'x', '×']:
-                    answers[qid] = 'b'
-                else:
-                    answers[qid] = answer.upper()
-                continue
-            
-            # ===== 패턴 4: Correct order (순서 문제) =====
-            order_match = re.search(r'Correct order:\s*([\d,\s]+)', line, re.IGNORECASE)
-            if order_match:
-                order_str = order_match.group(1)
-                order_items = re.findall(r'\d+', order_str)
-                if order_items:
-                    # 문제 ID를 찾아서 할당 (보통 20, 21번)
-                    for qid in self.question_ids:
-                        if qid not in answers and qid >= 20:
-                            answers[qid] = ','.join(order_items)
-                            break
-                continue
-            
-            # ===== 패턴 5: Matching (짝짓기 문제) =====
-            matching_pairs = re.findall(r'(\d+)[→-]([a-z])', line, re.IGNORECASE)
-            if matching_pairs:
-                matching_str = ';'.join([f"{p[0]}-{p[1].upper()}" for p in matching_pairs])
-                for qid in self.question_ids:
-                    if qid not in answers and 18 <= qid <= 19:
-                        answers[qid] = matching_str
+        # Tesseract 경로 (Windows)
+        if TESSERACT_AVAILABLE:
+            import sys
+            if sys.platform == 'win32':
+                tesseract_paths = [
+                    r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                    r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                ]
+                for path in tesseract_paths:
+                    if os.path.exists(path):
+                        pytesseract.pytesseract.tesseract_cmd = path
                         break
-                continue
-            
-            # ===== 패턴 6: Answer: X (계산 문제 답) =====
-            ans_match = re.search(r'Answer:\s*([A-Za-z0-9\.\-]+)', line, re.IGNORECASE)
-            if ans_match:
-                answer = ans_match.group(1).upper()
-                for qid in self.question_ids:
-                    if qid not in answers:
-                        answers[qid] = answer
-                        break
-                continue
         
-        # ===== 코드 문제 특수 처리 (def 함수명 찾기) =====
-        code_match = re.search(r'def\s+(\w+)', text, re.IGNORECASE)
-        if code_match and 22 not in answers:
-            answers[22] = code_match.group(1)
-        
-        # ===== 계산 문제 특수 처리 (Answer: 숫자) =====
-        calc_match = re.search(r'Answer:\s*(\d+(?:\.\d+)?)\s*$', text, re.MULTILINE)
-        if calc_match and 23 not in answers:
-            answers[23] = calc_match.group(1)
-        
-        # ===== 빈 칸 형태의 답안 찾기 (예: "1. ___") =====
-        blank_pattern = re.compile(r'(\d+)[\.\):]\s*[\[(]?\s*[\)\]]?\s*$')
-        for line in lines:
-            match = blank_pattern.match(line.strip())
-            if match:
-                qid = int(match.group(1))
-                if qid not in answers:
-                    answers[qid] = ""  # 빈 답안
-        
-        return answers
+        # 이미지 관련 변수
+        self.width = None
+        self.height = None
+        self.img_np = None
+        self.binary = None
     
-    def _normalize_answer(self, answer: str) -> str:
-        answer = answer.strip().upper()
-        
-        # 한글/특수문자 매핑
-        if answer in self.korean_mapping:
-            return self.korean_mapping[answer]
-        
-        # 길이가 1인 알파벳
-        if len(answer) == 1 and answer.isalpha():
-            return answer
-        
-        # True/False -> a/b 변환 (중요!)
-        if answer in ['TRUE', 'T', 'O', '○', '1']:
-            return 'A'   # a로 매핑
-        if answer in ['FALSE', 'F', 'X', '×', '0']:
-            return 'B'   # b로 매핑
-        
-        return answer
-    
-    def parse_batch(self, file_paths: List[str]) -> List[Dict[int, str]]:
-        """
-        여러 파일 배치 파싱
-        
-        Args:
-            file_paths: 파일 경로 리스트
-        
-        Returns:
-            각 파일의 답안 매핑 리스트
-        """
-        results = []
-        for file_path in file_paths:
-            ext = os.path.splitext(file_path)[1].lower()
-            
-            if ext == '.pdf':
-                answers = self.parse_from_pdf(file_path)
-            elif ext in ['.png', '.jpg', '.jpeg', '.bmp', '.tiff']:
-                answers = self.parse_from_image(file_path)
-            else:
-                continue
-            
-            results.append(answers)
-        
-        return results
-
-
-class AnswerValidator:
-    """답안 검증 엔진"""
-    
-    def __init__(self, exam_data: Dict):
-        self.exam_data = exam_data
-        self.answers_key = exam_data.get('answers', [])
-        
-        # 정답 정보 구축
-        self.correct_answers = {}
-        self.answer_types = {}
-        for q in self.answers_key:
+    def _build_qinfo_map(self, exam_data: Dict) -> Dict:
+        """JSON에서 문제 정보 매핑"""
+        qinfo_map = {}
+        for q in exam_data.get('answers', []):
             qid = q.get('question_id')
             if qid:
-                self.correct_answers[qid] = q.get('expected_answer', q.get('answer', '')).strip().upper()
-                self.answer_types[qid] = q.get('question_type', 'unknown')
+                qinfo_map[qid] = {
+                    'type': q.get('question_type', 'unknown'),
+                    'expected_answer': q.get('expected_answer', q.get('answer', '')),
+                    'score': q.get('score', 0),
+                    'position': q.get('position', {})
+                }
+        return qinfo_map
     
-    def validate_answer(self, qid: int, student_answer: str) -> Tuple[bool, float]:
-        correct = self.correct_answers.get(qid, '')
-        qtype = self.answer_types.get(qid, 'unknown')
+    def _prepare_image(self, page):
+        """PDF 페이지를 이미지로 변환 및 전처리 (tmp.py 방식)"""
+        self.scale = self.dpi / 72
+        zoom = self.dpi / 72
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
         
-        # True/False는 a/b로 변환하여 비교
-        if qtype == 'True/False':
-            student_norm = self._normalize_tf(student_answer)
-            correct_norm = self._normalize_tf(correct)
-        else:
-            student_norm = self._normalize(student_answer)
-            correct_norm = self._normalize(correct)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        self.img_np = np.array(img)
+        self.height, self.width = self.img_np.shape[:2]
         
-        if student_norm == correct_norm:
-            return True, 1.0
-        return False, 0.0
-
-    def _normalize_tf(self, answer: str) -> str:
-        """True/False 전용 정규화 (a/b 반환)"""
-        if not answer:
-            return ""
-        answer = answer.strip().upper()
-        if answer in ['T', 'TRUE', 'O', '○', '1']:
-            return 'A'
-        if answer in ['F', 'FALSE', 'X', '×', '0']:
-            return 'B'
-        return answer
+        # 이미지 전처리 (tmp.py 방식)
+        gray = cv2.cvtColor(self.img_np, cv2.COLOR_RGB2GRAY)
+        self.binary = cv2.adaptiveThreshold(
+            gray, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 31, 15
+        )
+        self.binary = cv2.medianBlur(self.binary, 3)
+        
+        return self.img_np, self.binary
     
-    def _is_synonym(self, student: str, correct: str) -> bool:
-        """동의어 확인 (확장 가능)"""
-        synonyms = {
-            'YES': ['Y', 'O', '○', 'TRUE'],
-            'NO': ['N', 'X', '×', 'FALSE'],
-            'TRUE': ['T', 'YES', 'O', '○'],
-            'FALSE': ['F', 'NO', 'X', '×'],
+    def _detect_with_easyocr(self, page_num: int, total_questions: int) -> Dict[int, List[Dict]]:
+        """EasyOCR로 문제 번호 검출 (tmp.py 방식)"""
+        candidates_by_id = defaultdict(list)
+        
+        if not self.reader:
+            return candidates_by_id
+        
+        try:
+            ocr_results = self.reader.readtext(self.binary)
+            
+            for result in ocr_results:
+                box, text, conf = result
+                text = text.strip()
+                
+                match = re.search(self.question_pattern, text)
+                if not match:
+                    continue
+                
+                try:
+                    qid = int(match.group(1))
+                    if not (1 <= qid <= total_questions):
+                        continue
+                    
+                    xs = [p[0] for p in box]
+                    ys = [p[1] for p in box]
+                    
+                    x1 = int(min(xs))
+                    y1 = int(min(ys))
+                    x2 = int(max(xs))
+                    y2 = int(max(ys))
+                    
+                    candidate = {
+                        "question_id": qid,
+                        "bbox": [x1, y1, x2, y2],
+                        "center_x": (x1 + x2) / 2,
+                        "center_y": (y1 + y2) / 2,
+                        "source": "easyocr",
+                        "ocr_confidence": float(conf)
+                    }
+                    candidates_by_id[qid].append(candidate)
+                except:
+                    pass
+        except Exception as e:
+            print(f"    EasyOCR error: {e}")
+        
+        return candidates_by_id
+    
+    def _detect_with_json_anchor(self, total_questions: int, qinfo_map: Dict) -> Dict[int, List[Dict]]:
+        """JSON 좌표를 앵커로 사용한 검출 (tmp.py 방식)"""
+        candidates_by_id = defaultdict(list)
+        
+        if not TESSERACT_AVAILABLE:
+            return candidates_by_id
+        
+        try:
+            # 스케일 계산 (PDF 기본 크기 595x842 기준)
+            scale_x = self.width / 595
+            scale_y = self.height / 842
+            
+            for qid, info in qinfo_map.items():
+                position = info.get('position', {})
+                if not position:
+                    continue
+                
+                json_x = position.get('x', 0)
+                json_y = position.get('y', 0)
+                
+                expected_x = int(json_x * scale_x)
+                expected_y = int(json_y * scale_y)
+                
+                x1 = max(0, expected_x - 120)
+                y1 = max(0, expected_y - 70)
+                x2 = min(self.width, expected_x + 320)
+                y2 = min(self.height, expected_y + 90)
+                
+                crop = self.binary[y1:y2, x1:x2]
+                
+                text = pytesseract.image_to_string(crop, config='--psm 7')
+                match = re.search(self.question_pattern, text)
+                
+                if not match:
+                    continue
+                
+                try:
+                    detected_qid = int(match.group(1))
+                    if detected_qid != qid:
+                        continue
+                    
+                    candidate = {
+                        "question_id": qid,
+                        "bbox": [x1, y1, x2, y2],
+                        "center_x": (x1 + x2) / 2,
+                        "center_y": (y1 + y2) / 2,
+                        "source": "json_anchor",
+                        "ocr_confidence": 0.7
+                    }
+                    candidates_by_id[qid].append(candidate)
+                    print(f"    [RECOVERED] Q{qid}")
+                except:
+                    pass
+        except Exception as e:
+            print(f"    JSON anchor error: {e}")
+        
+        return candidates_by_id
+    
+    def _add_interpolation_candidates(self, candidates_by_id: Dict, id_list: List[int]) -> Dict:
+        """보간법으로 누락된 문제 위치 추정 (tmp.py 방식)"""
+        existing = []
+        
+        for qid in id_list:
+            if qid in candidates_by_id and candidates_by_id[qid]:
+                cand = candidates_by_id[qid][0]
+                existing.append((qid, cand))
+        
+        existing = sorted(existing, key=lambda x: x[0])
+        
+        for i in range(len(existing) - 1):
+            current_id, current_q = existing[i]
+            next_id, next_q = existing[i + 1]
+            
+            gap = next_id - current_id
+            if gap <= 1:
+                continue
+            
+            for missing_id in range(current_id + 1, next_id):
+                ratio = (missing_id - current_id) / gap
+                
+                interp_y = int(
+                    current_q["center_y"]
+                    + ratio * (next_q["center_y"] - current_q["center_y"])
+                )
+                interp_x = int(current_q["center_x"])
+                
+                candidate = {
+                    "question_id": missing_id,
+                    "bbox": [
+                        interp_x - 100,
+                        interp_y - 40,
+                        interp_x + 300,
+                        interp_y + 40
+                    ],
+                    "center_x": interp_x,
+                    "center_y": interp_y,
+                    "source": "interpolated",
+                    "ocr_confidence": 0.3
+                }
+                candidates_by_id[missing_id].append(candidate)
+                print(f"    [INTERPOLATED] Q{missing_id}")
+        
+        return candidates_by_id
+    
+    def _compute_layout_score(self, candidate, prev_q, next_q) -> float:
+        """레이아웃 점수 계산 (tmp.py 방식)"""
+        score = 0
+        y = candidate["center_y"]
+        
+        # OCR confidence
+        score += candidate["ocr_confidence"] * 50
+        
+        # monotonic order (Y 좌표 순서)
+        if prev_q is not None:
+            if y > prev_q["center_y"]:
+                score += 80
+            else:
+                score -= 200
+        
+        if next_q is not None:
+            if y < next_q["center_y"]:
+                score += 80
+            else:
+                score -= 200
+        
+        # spacing consistency
+        if prev_q is not None and next_q is not None:
+            prev_gap = y - prev_q["center_y"]
+            next_gap = next_q["center_y"] - y
+            spacing_diff = abs(prev_gap - next_gap)
+            score -= spacing_diff * 0.05
+        
+        # source prior
+        source_bonus = {
+            "easyocr": 20,
+            "json_anchor": 15,
+            "interpolated": 10
         }
+        score += source_bonus.get(candidate["source"], 0)
         
-        for key, values in synonyms.items():
-            if correct == key and student in values:
-                return True
-            if student == key and correct in values:
-                return True
+        return score
+    
+    def _select_best_candidates(self, candidates_by_id: Dict, total_questions: int) -> List[Dict]:
+        """최적의 문제 후보 선택 (tmp.py 방식)"""
+        final_questions = []
         
-        return False
+        for qid in range(1, total_questions + 1):
+            candidates = candidates_by_id.get(qid, [])
+            if len(candidates) == 0:
+                continue
+            
+            prev_q = None
+            next_q = None
+            
+            # previous
+            for prev_id in range(qid - 1, 0, -1):
+                if prev_id in candidates_by_id and candidates_by_id[prev_id]:
+                    prev_q = candidates_by_id[prev_id][0]
+                    break
+            
+            # next
+            for next_id in range(qid + 1, total_questions + 1):
+                if next_id in candidates_by_id and candidates_by_id[next_id]:
+                    next_q = candidates_by_id[next_id][0]
+                    break
+            
+            best_score = -999999
+            best_candidate = None
+            
+            for candidate in candidates:
+                score = self._compute_layout_score(candidate, prev_q, next_q)
+                candidate["layout_score"] = score
+                
+                if score > best_score:
+                    best_score = score
+                    best_candidate = candidate
+            
+            final_questions.append(best_candidate)
+            print(f"    Q{qid} -> {best_candidate['source']}, score={round(best_score, 2)}")
+        
+        return final_questions
+    
+    def _build_regions(self, question_list: List[Dict], qinfo_map: Dict) -> Dict:
+        """검출된 문제 위치로 영역 생성 (tmp.py 방식 - 순차적)"""
+        regions = {}
+                
+        for i, q in enumerate(question_list):
+            qid = q["question_id"]
+            x1, y1, x2, y2 = q["bbox"]
+            
+            top = max(0, y1 - 20)
+            
+            # 다음 문제의 Y 좌표를 기준으로 영역 하단 결정 (중요!)
+            if i < len(question_list) - 1:
+                bottom = question_list[i + 1]["bbox"][1] - 10
+            else:
+                bottom = self.height - 20
+            
+            # 컬럼별 X 범위 (X 좌표 기준)
+            if q["center_x"] < self.width / 2:
+                left = 0
+                right = self.width // 2 - 20
+                column = 'left'
+            else:
+                left = self.width // 2 + 20
+                right = self.width - 1
+                column = 'right'
+            
+            pdf_left = left / self.scale
+            pdf_top = top / self.scale
+            pdf_right = right / self.scale
+            pdf_bottom = bottom / self.scale
+
+            regions[qid] = {
+                'page': 0,
+                'page_display': 1,
+                'region': fitz.Rect(pdf_left, pdf_top, pdf_right, pdf_bottom),
+                'question_bbox': (x1, y1, x2, y2),
+                'question_type': qinfo_map[qid]['type'],
+                'expected_answer': qinfo_map[qid]['expected_answer'],
+                'score': qinfo_map[qid]['score'],
+                'detection_source': q["source"],
+                'layout_score': q.get("layout_score", 0)
+            }
+        
+        return regions
+    
+    def _split_columns_by_position(self, candidates_by_id: Dict, total_questions: int):
+        """tmp.py와 동일한 고정 컬럼 분할"""
+
+        LEFT_IDS = []
+        RIGHT_IDS = []
+
+        for qid in range(1, total_questions + 1):
+
+            if qid <= 16:
+                LEFT_IDS.append(qid)
+            else:
+                RIGHT_IDS.append(qid)
+
+        return LEFT_IDS, RIGHT_IDS
+
+    def detect_all_questions(self, pdf_path: str, exam_data: Dict) -> Dict:
+        """PDF에서 모든 문제 위치를 동적으로 검출 (tmp.py 로직 기반)"""
+        if not fitz:
+            raise ImportError("PyMuPDF (fitz) is required")
+        
+        doc = fitz.open(pdf_path)
+        self.question_regions = {}
+        qinfo_map = self._build_qinfo_map(exam_data)
+        total_questions = exam_data.get(
+            'total_questions',
+            max(qinfo_map.keys()) if qinfo_map else 0
+        )
+        
+        print("\n🔍 Dynamic question detection with tmp.py logic...")
+        
+        # 첫 페이지만 처리 (tmp.py와 동일)
+        page_num = 0
+        page = doc[page_num]
+        
+        print(f"  Page {page_num + 1}:")
+        
+        # 1. 이미지 준비
+        self._prepare_image(page)
+        
+        # 2. EasyOCR 검출
+        candidates_by_id = self._detect_with_easyocr(page_num, total_questions)
+        
+        # 3. JSON 앵커 검출
+        json_candidates = self._detect_with_json_anchor(total_questions, qinfo_map)
+        for qid, cand_list in json_candidates.items():
+            candidates_by_id[qid].extend(cand_list)
+        
+        # 4. 컬럼 분할 - X 좌표 기반 (tmp.py 방식)
+        LEFT_IDS, RIGHT_IDS = self._split_columns_by_position(candidates_by_id, total_questions)
+        
+        print(f"    Left column: {LEFT_IDS}")
+        print(f"    Right column: {RIGHT_IDS}")
+        
+        # 5. 보간법 적용 (왼쪽/오른쪽 컬럼별)
+        candidates_by_id = self._add_interpolation_candidates(candidates_by_id, LEFT_IDS)
+        candidates_by_id = self._add_interpolation_candidates(candidates_by_id, RIGHT_IDS)
+        
+        # 6. 최적 후보 선택
+        final_questions = self._select_best_candidates(candidates_by_id, total_questions)
+        
+        # 7. 영역 생성
+        left_questions = []
+        right_questions = []
+
+        for q in final_questions:
+            if q['center_x'] < self.width / 2:
+                left_questions.append(q)
+            else:
+                right_questions.append(q)
+
+        left_questions = sorted(left_questions, key=lambda x: x['center_y'])
+        right_questions = sorted(right_questions, key=lambda x: x['center_y'])
+
+        left_regions = self._build_regions(left_questions, qinfo_map)
+        right_regions = self._build_regions(right_questions, qinfo_map)
+
+        self.question_regions = {}
+        self.question_regions.update(left_regions)
+        self.question_regions.update(right_regions)
+        
+        doc.close()
+        print(f"\n✅ Detected {len(self.question_regions)} questions")
+        return self.question_regions
+
+
+class AnswerExtractor:
+    """검출된 영역에서 답안 추출"""
+    
+    def __init__(self, use_ocr: bool = True):
+        self.use_ocr = use_ocr and (TESSERACT_AVAILABLE or EASYOCR_AVAILABLE)
+    
+    def extract_answers(self, pdf_path: str, question_regions: Dict) -> tuple:
+        """검출된 영역에서 답안 추출"""
+        if not fitz:
+            raise ImportError("PyMuPDF (fitz) is required")
+        
+        doc = fitz.open(pdf_path)
+        answers = {}
+        region_texts = {}
+        
+        print("\n📝 Extracting answers from regions...")
+        
+        for qid, info in sorted(question_regions.items()):
+            page_num = info['page']
+            region = info['region']
+            qtype = info['question_type']
+            
+            page = doc[page_num]
+            
+            # 텍스트 추출
+            text = page.get_text("text", clip=region)
+            
+            # OCR 추가
+            if self.use_ocr and (not text or len(text.strip()) < 20):
+                text = self._apply_ocr(page, region, text)
+            
+            region_texts[qid] = text.strip() if text else ""
+            
+            # 답안 파싱
+            answer = self._parse_answer(text, qtype)
+            answers[qid] = answer
+            
+            answer_preview = answer[:50] if answer else '(empty)'
+            print(f"  Q{qid:2d}: '{answer_preview}'")
+        
+        doc.close()
+        return answers, region_texts
+    
+    def _apply_ocr(self, page, region: fitz.Rect, existing_text: str) -> str:
+        """OCR 적용하여 텍스트 보완"""
+        try:
+            zoom = 2.0
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat, clip=region, alpha=False)
+            
+            img_data = pix.tobytes("png")
+            img = Image.open(io.BytesIO(img_data))
+            ocr_text = pytesseract.image_to_string(img, lang='eng+kor')
+            
+            if ocr_text and ocr_text.strip():
+                if existing_text:
+                    return existing_text + "\n" + ocr_text
+                return ocr_text
+        except Exception as e:
+            pass
+        
+        return existing_text
+    
+    def _parse_answer(self, text: str, qtype: str) -> str:
+        """텍스트에서 답안 파싱"""
+        if not text:
+            return ""
+        
+        text = text.strip()
+        
+        # Multiple Choice / True/False
+        if qtype in ['Multiple Choice', 'True/False']:
+            brackets = re.findall(r'\[([a-z])\]', text, re.IGNORECASE)
+            if brackets:
+                return brackets[-1].lower()
+            
+            match = re.search(r'Q?\d+\.\s*([A-Za-z])', text)
+            if match:
+                return match.group(1).lower()
+            
+            match = re.search(r'\b([A-Za-z])\b', text)
+            if match:
+                return match.group(1).lower()
+        
+        # Matching
+        elif qtype == 'Matching':
+            pairs = re.findall(r'(\d+)[→\-=](\w)', text)
+            if pairs:
+                return ';'.join([f"{p[0]}-{p[1].upper()}" for p in pairs])
+            
+            pairs = re.findall(r'(\d+)\s+([A-Z])', text)
+            if pairs:
+                return ';'.join([f"{p[0]}-{p[1]}" for p in pairs])
+        
+        # Ordering
+        elif qtype in ['Ordering', 'Ordering/Ranking']:
+            numbers = re.findall(r'\d+', text)
+            if len(numbers) >= 3:
+                return ','.join(numbers[:5])
+        
+        # Fill in the Blank
+        elif qtype == 'Fill in the Blank':
+            blanks = re.findall(r'______\s*([^\n]+)', text)
+            if blanks:
+                return ', '.join([b.strip() for b in blanks[:3]])
+        
+        # Calculation
+        elif qtype == 'Calculation':
+            match = re.search(r'Answer:\s*([\d\.]+)', text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+            match = re.search(r'=\s*([\d\.]+)', text)
+            if match:
+                return match.group(1)
+        
+        # Code
+        elif qtype == 'Code Writing':
+            match = re.search(r'def\s+(\w+)', text)
+            if match:
+                return match.group(1)
+            match = re.search(r'class\s+(\w+)', text)
+            if match:
+                return match.group(1)
+        
+        # Short Answer
+        elif qtype == 'Short Answer':
+            lines = text.split('\n')
+            if lines:
+                first_line = lines[0].strip()
+                if first_line:
+                    return first_line[:100]
+        
+        return text[:100]
