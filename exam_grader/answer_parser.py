@@ -2,7 +2,7 @@
 import os
 import re
 import json
-from typing import Dict, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List
 from collections import defaultdict
 import fitz
 import cv2
@@ -18,6 +18,8 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
     EASYOCR_AVAILABLE = False
+
+from .omr import omr_read_mc_tf_selection_debug, pdf_region_to_bgr
 
 
 class DynamicQuestionDetector:
@@ -461,17 +463,23 @@ class DynamicQuestionDetector:
 class AnswerExtractor:
     """검출된 영역에서 답안 추출"""
     
-    def __init__(self, use_ocr: bool = True):
+    def __init__(self, use_ocr: bool = True, omr_zoom: float = 3.4):
         self.use_ocr = use_ocr and (TESSERACT_AVAILABLE or EASYOCR_AVAILABLE)
+        self.omr_zoom = omr_zoom
     
     def extract_answers(self, pdf_path: str, question_regions: Dict) -> tuple:
-        """검출된 영역에서 답안 추출"""
+        """검출된 영역에서 답안 추출.
+
+        Returns:
+            (answers, region_texts, extract_debug) — extract_debug[qid]는 UI/로그용 메타데이터.
+        """
         if not fitz:
             raise ImportError("PyMuPDF (fitz) is required")
         
         doc = fitz.open(pdf_path)
         answers = {}
         region_texts = {}
+        extract_debug: Dict = {}
         
         print("\n📝 Extracting answers from regions...")
         
@@ -491,15 +499,23 @@ class AnswerExtractor:
             
             region_texts[qid] = text.strip() if text else ""
             
-            # 답안 파싱
+            # 답안 파싱 (객관식/참거짓은 OMR 우선)
             answer = self._parse_answer(text, qtype)
+            if qtype in ("Multiple Choice", "True/False"):
+                answer, merge_dbg = self._merge_mc_answer(page, region, qtype, answer, text)
+                extract_debug[qid] = merge_dbg
+            else:
+                extract_debug[qid] = {
+                    "answer_channel": "text",
+                    "region_text_len": len(region_texts[qid]),
+                }
             answers[qid] = answer
             
             answer_preview = answer[:50] if answer else '(empty)'
             print(f"  Q{qid:2d}: '{answer_preview}'")
         
         doc.close()
-        return answers, region_texts
+        return answers, region_texts, extract_debug
     
     def _apply_ocr(self, page, region: fitz.Rect, existing_text: str) -> str:
         """OCR 적용하여 텍스트 보완"""
@@ -520,7 +536,51 @@ class AnswerExtractor:
             pass
         
         return existing_text
-    
+
+    def _region_to_bgr(self, page, region: fitz.Rect) -> np.ndarray:
+        """PDF 영역을 고해상도 BGR numpy로 렌더 (OMR 공용 `pdf_region_to_bgr` 위임)."""
+        return pdf_region_to_bgr(page, region, zoom=self.omr_zoom)
+
+    def _merge_mc_answer(
+        self, page, region: fitz.Rect, qtype: str, text_answer: str, raw_text: str
+    ) -> Tuple[str, Dict[str, Any]]:
+        """OMR(필기 농도)과 OCR 파싱 결과를 결합. (최종 답, 디버그 dict)."""
+        omr_dbg: Dict[str, Any] = {}
+        try:
+            bgr = self._region_to_bgr(page, region)
+            omr_ans, conf, omr_dbg = omr_read_mc_tf_selection_debug(bgr, qtype)
+        except Exception:
+            omr_ans, conf = "", 0.0
+
+        ta = (text_answer or "").strip().lower()[:1]
+        oa = (omr_ans or "").strip().lower()[:1]
+
+        merge_source = "empty"
+        if oa and ta and oa != ta:
+            final = oa if conf >= 0.42 else ta
+            merge_source = "omr_wins" if conf >= 0.42 else "ocr_wins_conflict"
+        elif conf >= 0.30 and oa:
+            final = oa
+            merge_source = "omr"
+        elif oa and conf >= 0.18 and not ta:
+            final = oa
+            merge_source = "omr_low_conf"
+        elif ta:
+            final = ta
+            merge_source = "ocr"
+        else:
+            final = oa or ta
+            merge_source = "omr_or_empty" if oa else "empty"
+
+        return final, {
+            "answer_channel": "image_primary",
+            "omr_letter": oa,
+            "omr_confidence": float(conf),
+            "omr_detail": omr_dbg,
+            "ocr_parsed_letter": ta,
+            "merge_source": merge_source,
+        }
+
     def _parse_answer(self, text: str, qtype: str) -> str:
         """텍스트에서 답안 파싱"""
         if not text:

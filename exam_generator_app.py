@@ -3,6 +3,7 @@ import sys
 import json
 import tempfile
 import os
+import re 
 from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QFont, QColor, QPixmap, QIcon, QPainter, QPen
@@ -253,35 +254,36 @@ class GeneratorApp(QMainWindow):
         """)
         btn_pdf.clicked.connect(self.export_pdf)
 
-        btn_answer = QPushButton("📝 Save Answer Sheet")
-        btn_answer.setStyleSheet("""
+        # 통합 저장 버튼 (답지 PDF + JSON)
+        btn_save_all = QPushButton("💾 Save Answer Sheet + JSON")
+        btn_save_all.setStyleSheet("""
             QPushButton {
-                background-color: #17a2b8;
+                background-color: #007acc;
                 color: white;
                 border-radius: 8px;
                 padding: 10px;
                 font-weight: bold;
             }
-            QPushButton:hover { background-color: #138496; }
+            QPushButton:hover { background-color: #005a9e; }
         """)
-        btn_answer.clicked.connect(self.export_answer_sheet)
+        btn_save_all.clicked.connect(self.export_answer_sheet_with_json)
 
-        btn_answer_key = QPushButton("🔑 Export Answer Key")
-        btn_answer_key.setStyleSheet("""
-            QPushButton {
-                background-color: #ffc107;
-                color: #212529;
-                border-radius: 8px;
-                padding: 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #e0a800; }
-        """)
-        btn_answer_key.clicked.connect(self.export_answer_key_with_positions)
+        # btn_answer_key = QPushButton("🔑 Export Answer Key")
+        # btn_answer_key.setStyleSheet("""
+        #     QPushButton {
+        #         background-color: #ffc107;
+        #         color: #212529;
+        #         border-radius: 8px;
+        #         padding: 10px;
+        #         font-weight: bold;
+        #     }
+        #     QPushButton:hover { background-color: #e0a800; }
+        # """)
+        # btn_answer_key.clicked.connect(self.export_answer_key_with_positions)
 
         button_layout.addWidget(btn_pdf)
-        button_layout.addWidget(btn_answer)
-        button_layout.addWidget(btn_answer_key)
+        button_layout.addWidget(btn_save_all)
+        # button_layout.addWidget(btn_answer_key)
 
         right_layout.addWidget(self.pdf_preview, 1)
         right_layout.addWidget(button_container)
@@ -855,22 +857,150 @@ class GeneratorApp(QMainWindow):
         
         c.save()
 
-    def export_answer_sheet(self):
-        """답안지 PDF 저장"""
+    def export_answer_sheet_with_json(self):
+        """답안지 PDF와 시험정보 JSON을 함께 저장"""
         if not self.questions:
-            QMessageBox.warning(self, "Notice", "Please add questions first.")
+            QMessageBox.warning(self, "Notice", "No questions to export.")
             return
+        
+        # settings에 QR 메타데이터용 값들 추가
+        export_settings = self.settings.copy()  # 원본 보존을 위해 복사
+        export_settings['exam_id'] = self.settings.get('exam_title', 'unknown').replace(' ', '_')
+        export_settings['version'] = self.settings.get('version', 'A')
+        export_settings['layout_hash'] = self.settings.get('layout_hash', '')
+        export_settings['timestamp'] = datetime.now().isoformat()
+        export_settings['total_pages'] = 0  # generate_answer_sheet에서 업데이트 가능
 
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Answer Sheet PDF", "", "PDF (*.pdf)")
-        if not file_path:
+        # 기본 파일명 생성 (시험 제목 기반)
+        base_name = self.settings.get('exam_title', 'exam').replace(' ', '_')
+        base_name = re.sub(r'[\\/*?:"<>|]', '', base_name)  # 파일명에 불가능한 문자 제거
+        
+        # 저장할 파일 경로 선택 (PDF 기준)
+        pdf_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save Answer Sheet and Exam Info", 
+            f"{base_name}_answer_sheet.pdf", 
+            "PDF Files (*.pdf)"
+        )
+        
+        if not pdf_path:
             return
-
+        
+        # JSON 파일 경로 생성 (같은 이름, 확장자만 .json)
+        json_path = pdf_path.replace('.pdf', '.json')
+        
         try:
-            answer_sheet_engine = AnswerSheetEngine(self.questions, self.settings)
-            answer_sheet_engine.generate_answer_sheet(file_path)
-            QMessageBox.information(self, "Success", f"Answer Sheet PDF has been created.\n{file_path}")
+            # 1. 답안지 PDF 생성
+            answer_sheet_engine = AnswerSheetEngine(self.questions, export_settings)
+            total_pages = answer_sheet_engine.generate_answer_sheet(pdf_path)
+            
+            # 전체 페이지 수 업데이트 (필요시)
+            export_settings['total_pages'] = total_pages
+
+            # 2. 시험정보 JSON 생성 (위치 정보 포함)
+            self._export_exam_info_json(json_path)
+            
+            QMessageBox.information(
+                self, 
+                "Success", 
+                f"✅ Answer Sheet PDF: {pdf_path}\n✅ Exam Info JSON: {json_path}\n\n"
+                f"Total: {len(self.questions)} questions, {sum(q.get('score', 0) for q in self.questions)} points"
+            )
+            
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to create answer sheet: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to save files: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def _export_exam_info_json(self, json_path: str):
+        """시험정보 JSON 저장 (ArUco 기준 정규화 좌표)"""
+        import json
+        from datetime import datetime
+        
+        position_data = []
+        choice_region_data = []
+        
+        temp_dir = tempfile.gettempdir()
+        temp_pdf = os.path.join(temp_dir, f"temp_answer_sheet_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+        
+        def save_position(qid, x, y, page):
+            position_data.append({
+                'question_id': qid,
+                'page': page,
+                'x': x,
+                'y': y
+            })
+        
+        # 수정된 콜백 함수 (6개 인자만 받음)
+        def save_choice_region(qid, choice_letter, x, y, w, h):
+            """ArUco 기준 정규화 좌표 저장 (region_type, absolute_info 제거)"""
+            choice_region_data.append({
+                'question_id': qid,
+                'choice': choice_letter,
+                'normalized': {
+                    'x': x,
+                    'y': y,
+                    'w': w,
+                    'h': h
+                }
+            })
+        
+        # settings에 상대좌표 사용 설정 추가
+        self.settings['use_relative_coordinates'] = True
+        
+        answer_sheet_engine = AnswerSheetEngine(self.questions, self.settings)
+        answer_sheet_engine.generate_answer_sheet(temp_pdf, save_position, save_choice_region)
+        
+        if os.path.exists(temp_pdf):
+            os.remove(temp_pdf)
+        
+        exam_info = {
+            "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
+            "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
+            "total_questions": len(self.questions),
+            "total_points": sum(q.get('score', 0) for q in self.questions),
+            "generated_at": datetime.now().isoformat(),
+            "coordinate_system": "aruco_normalized",
+            "normalization_basis": {
+                "origin": "ArUco marker ID 0 (top-left)",
+                "unit": "ArUco marker ID 3 (bottom-right)",
+                "range": [0, 1]
+            },
+            "page_size": self.settings.get('page_size', 'A4'),
+            "answers": [],
+            "choice_regions": choice_region_data
+        }
+        
+        for i, q in enumerate(self.questions):
+            q_info = {
+                "question_id": q['id'],
+                "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
+                "score": q.get('score', 5),
+                "answer": self._get_answer_text(q),
+                "expected_answer": self._get_expected_answer(q),
+                "position": position_data[i] if i < len(position_data) else None,
+                "num_choices": self._get_num_choices(q)
+            }
+            
+            # 문제 유형별 추가 정보
+            if q['type'] == 0:
+                q_info["choices"] = q.get('choices', [])
+            elif q['type'] == 1:
+                q_info["choices"] = ["True", "False"]
+            elif q['type'] == 5:
+                q_info["matching_pairs"] = q.get('matching_pairs', [])
+            elif q['type'] == 6:
+                q_info["ordering_items"] = q.get('ordering_items', [])
+            
+            # 문제별 영역 정보 추가
+            q_regions = [r for r in choice_region_data if r['question_id'] == q['id']]
+            if q_regions:
+                q_info["choice_regions"] = q_regions
+            
+            exam_info["answers"].append(q_info)
+        
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(exam_info, f, ensure_ascii=False, indent=2)
 
     def _calculate_answer_sheet_height(self, q, col_width, line_height, small_line_height):
         """질문이 차지하는 높이 계산 - _draw_answer_sheet_question와 일치하도록"""
@@ -1058,88 +1188,138 @@ class GeneratorApp(QMainWindow):
         
         return y
     
-    def export_answer_key_with_positions(self):
-        """Export answer key with positions to JSON file (Answer Sheet 기준)"""
-        if not self.questions:
-            QMessageBox.warning(self, "Notice", "No questions to export.")
-            return
+    # def export_answer_key_with_positions(self):
+    #     """Export answer key with positions to JSON file (Answer Sheet 기준)"""
+    #     if not self.questions:
+    #         QMessageBox.warning(self, "Notice", "No questions to export.")
+    #         return
         
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, 
-            "Save Answer Key with Positions", 
-            "", 
-            "JSON Files (*.json)"
-        )
-        if not file_path:
-            return
+    #     file_path, _ = QFileDialog.getSaveFileName(
+    #         self, 
+    #         "Save Answer Key with Positions", 
+    #         "", 
+    #         "JSON Files (*.json)"
+    #     )
+    #     if not file_path:
+    #         return
         
-        try:
-            temp_dir = tempfile.gettempdir()
-            temp_pdf = os.path.join(temp_dir, f"answer_sheet_temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+    #     try:
+    #         temp_dir = tempfile.gettempdir()
+    #         temp_pdf = os.path.join(temp_dir, f"answer_sheet_temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
             
-            position_data = []
+    #         position_data = []
+    #         choices_position_data = []  # 선택지 위치 정보 저장
             
-            # 위치 정보 저장 콜백 함수
-            def save_position(qid, x, y, page):
-                position_data.append({
-                    'question_id': qid,
-                    'page': page,
-                    'x': x,
-                    'y': y
-                })
-                print(f"Saved position: Q{qid} -> page={page}, x={x}, y={y}")  # 디버깅
+    #         # 문제 위치 정보 저장 콜백
+    #         def save_position(qid, x, y, page):
+    #             position_data.append({
+    #                 'question_id': qid,
+    #                 'page': page,
+    #                 'x': x,
+    #                 'y': y
+    #             })
             
-            # Answer Sheet 생성하면서 위치 정보 수집
-            answer_sheet_engine = AnswerSheetEngine(self.questions, self.settings)
-            last_page = answer_sheet_engine.generate_answer_sheet(temp_pdf, save_position)
+    #         # 선택지 위치 정보 저장 콜백
+    #         def save_choice_position(qid, choice_letter, x, y, page, choice_type):
+    #             choices_position_data.append({
+    #                 'question_id': qid,
+    #                 'choice_letter': choice_letter,
+    #                 'page': page,
+    #                 'x': x,
+    #                 'y': y,
+    #                 'choice_type': choice_type
+    #             })
             
-            print(f"Total pages used: {last_page}")
-            print(f"Positions saved: {len(position_data)}")
+    #         # Answer Sheet 생성하면서 위치 정보 수집
+    #         answer_sheet_engine = AnswerSheetEngine(self.questions, self.settings)
+    #         last_page = answer_sheet_engine.generate_answer_sheet(
+    #             temp_pdf, 
+    #             save_position, 
+    #             save_choice_position  # 선택지 위치 콜백 추가
+    #         )
             
-            # position_data와 questions 순서 확인
-            for i, (q, pos) in enumerate(zip(self.questions, position_data)):
-                print(f"Q{q['id']}: page={pos['page']}, x={pos['x']}, y={pos['y']}")
+    #         # JSON 데이터 구성
+    #         answer_key = {
+    #             "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
+    #             "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
+    #             "total_questions": len(self.questions),
+    #             "total_points": sum(q.get('score', 0) for q in self.questions),
+    #             "generated_at": datetime.now().isoformat(),
+    #             "coordinate_system": "top_left_origin",
+    #             "page_size": self.settings.get('page_size', 'A4'),
+    #             "answers": [],
+    #             "choice_positions": choices_position_data  # 선택지 위치 정보 추가
+    #         }
             
-            answer_key = {
-                "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
-                "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
-                "total_questions": len(self.questions),
-                "total_points": sum(q.get('score', 0) for q in self.questions),
-                "generated_at": datetime.now().isoformat(),
-                "coordinate_system": "top_left_origin",
-                "page_size": self.settings.get('page_size', 'A4'),
-                "answers": []
-            }
+    #         for i, q in enumerate(self.questions):
+    #             q_info = {
+    #                 "question_id": q['id'],
+    #                 "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
+    #                 "score": q.get('score', 5),
+    #                 "answer": self._get_answer_text(q),
+    #                 "expected_answer": self._get_expected_answer(q),
+    #                 "position": position_data[i] if i < len(position_data) else None,
+    #                 "num_choices": self._get_num_choices(q)  # 선택지 개수 추가
+    #             }
+                
+    #             # Multiple Choice인 경우 선택지 목록도 저장
+    #             if q['type'] == 0:
+    #                 q_info["choices"] = q.get('choices', [])
+    #             elif q['type'] == 1:  # True/False
+    #                 q_info["choices"] = ["True", "False"]
+    #             elif q['type'] == 5:  # Matching
+    #                 pairs = q.get('matching_pairs', [])
+    #                 q_info["matching_pairs"] = pairs
+    #                 q_info["num_matches"] = len(pairs)
+    #             elif q['type'] == 6:  # Ordering
+    #                 items = q.get('ordering_items', [])
+    #                 q_info["ordering_items"] = items
+    #                 q_info["num_items"] = len(items)
+                
+    #             answer_key["answers"].append(q_info)
             
-            for i, q in enumerate(self.questions):
-                q_info = {
-                    "question_id": q['id'],
-                    "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
-                    "score": q.get('score', 5),
-                    "answer": self._get_answer_text(q),
-                    "expected_answer": self._get_expected_answer(q),
-                    "position": position_data[i] if i < len(position_data) else None
-                }
-                answer_key["answers"].append(q_info)
+    #         # 선택지 위치를 문제별로 그룹화하여 추가 정보 제공
+    #         for q in self.questions:
+    #             qid = q['id']
+    #             q_choices = [cp for cp in choices_position_data if cp['question_id'] == qid]
+    #             if q_choices:
+    #                 for answer in answer_key["answers"]:
+    #                     if answer["question_id"] == qid:
+    #                         answer["choice_positions"] = q_choices
+    #                         break
             
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(answer_key, f, ensure_ascii=False, indent=2)
+    #         with open(file_path, 'w', encoding='utf-8') as f:
+    #             json.dump(answer_key, f, ensure_ascii=False, indent=2)
             
-            if os.path.exists(temp_pdf):
-                os.remove(temp_pdf)
+    #         if os.path.exists(temp_pdf):
+    #             os.remove(temp_pdf)
             
-            QMessageBox.information(
-                self, 
-                "Success", 
-                f"Answer key with positions (Answer Sheet based) has been saved.\n{file_path}\n\n"
-                f"Total: {len(self.questions)} questions, {answer_key['total_points']} points\n"
-                f"Pages used: {last_page}"
-            )
+    #         QMessageBox.information(
+    #             self, 
+    #             "Success", 
+    #             f"Answer key with positions has been saved.\n{file_path}\n\n"
+    #             f"Total: {len(self.questions)} questions, {answer_key['total_points']} points\n"
+    #             f"Choice positions: {len(choices_position_data)}"
+    #         )
             
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to export answer key: {str(e)}")
-            import traceback
-            traceback.print_exc()
+    #     except Exception as e:
+    #         QMessageBox.critical(self, "Error", f"Failed to export answer key: {str(e)}")
+    #         import traceback
+    #         traceback.print_exc()
+
+    def _get_num_choices(self, q):
+        """선택지 개수 반환"""
+        qtype = q['type']
+        if qtype == 0:  # Multiple Choice
+            return len(q.get('choices', []))
+        elif qtype == 1:  # True/False
+            return 2
+        elif qtype == 5:  # Matching
+            return len(q.get('matching_pairs', []))
+        elif qtype == 6:  # Ordering
+            return len(q.get('ordering_items', []))
+        else:
+            return 0
 
     def _get_answer_text(self, q):
         """Return answer text for display"""
