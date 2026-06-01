@@ -1187,125 +1187,6 @@ class GeneratorApp(QMainWindow):
             y -= line_height
         
         return y
-    
-    # def export_answer_key_with_positions(self):
-    #     """Export answer key with positions to JSON file (Answer Sheet 기준)"""
-    #     if not self.questions:
-    #         QMessageBox.warning(self, "Notice", "No questions to export.")
-    #         return
-        
-    #     file_path, _ = QFileDialog.getSaveFileName(
-    #         self, 
-    #         "Save Answer Key with Positions", 
-    #         "", 
-    #         "JSON Files (*.json)"
-    #     )
-    #     if not file_path:
-    #         return
-        
-    #     try:
-    #         temp_dir = tempfile.gettempdir()
-    #         temp_pdf = os.path.join(temp_dir, f"answer_sheet_temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
-            
-    #         position_data = []
-    #         choices_position_data = []  # 선택지 위치 정보 저장
-            
-    #         # 문제 위치 정보 저장 콜백
-    #         def save_position(qid, x, y, page):
-    #             position_data.append({
-    #                 'question_id': qid,
-    #                 'page': page,
-    #                 'x': x,
-    #                 'y': y
-    #             })
-            
-    #         # 선택지 위치 정보 저장 콜백
-    #         def save_choice_position(qid, choice_letter, x, y, page, choice_type):
-    #             choices_position_data.append({
-    #                 'question_id': qid,
-    #                 'choice_letter': choice_letter,
-    #                 'page': page,
-    #                 'x': x,
-    #                 'y': y,
-    #                 'choice_type': choice_type
-    #             })
-            
-    #         # Answer Sheet 생성하면서 위치 정보 수집
-    #         answer_sheet_engine = AnswerSheetEngine(self.questions, self.settings)
-    #         last_page = answer_sheet_engine.generate_answer_sheet(
-    #             temp_pdf, 
-    #             save_position, 
-    #             save_choice_position  # 선택지 위치 콜백 추가
-    #         )
-            
-    #         # JSON 데이터 구성
-    #         answer_key = {
-    #             "exam_title": self.settings.get('exam_title', 'Untitled Exam'),
-    #             "exam_date": self.settings.get('exam_date', datetime.now().strftime("%Y-%m-%d")),
-    #             "total_questions": len(self.questions),
-    #             "total_points": sum(q.get('score', 0) for q in self.questions),
-    #             "generated_at": datetime.now().isoformat(),
-    #             "coordinate_system": "top_left_origin",
-    #             "page_size": self.settings.get('page_size', 'A4'),
-    #             "answers": [],
-    #             "choice_positions": choices_position_data  # 선택지 위치 정보 추가
-    #         }
-            
-    #         for i, q in enumerate(self.questions):
-    #             q_info = {
-    #                 "question_id": q['id'],
-    #                 "question_type": QUESTION_TYPES.get(q['type'], {}).get('name', 'Unknown'),
-    #                 "score": q.get('score', 5),
-    #                 "answer": self._get_answer_text(q),
-    #                 "expected_answer": self._get_expected_answer(q),
-    #                 "position": position_data[i] if i < len(position_data) else None,
-    #                 "num_choices": self._get_num_choices(q)  # 선택지 개수 추가
-    #             }
-                
-    #             # Multiple Choice인 경우 선택지 목록도 저장
-    #             if q['type'] == 0:
-    #                 q_info["choices"] = q.get('choices', [])
-    #             elif q['type'] == 1:  # True/False
-    #                 q_info["choices"] = ["True", "False"]
-    #             elif q['type'] == 5:  # Matching
-    #                 pairs = q.get('matching_pairs', [])
-    #                 q_info["matching_pairs"] = pairs
-    #                 q_info["num_matches"] = len(pairs)
-    #             elif q['type'] == 6:  # Ordering
-    #                 items = q.get('ordering_items', [])
-    #                 q_info["ordering_items"] = items
-    #                 q_info["num_items"] = len(items)
-                
-    #             answer_key["answers"].append(q_info)
-            
-    #         # 선택지 위치를 문제별로 그룹화하여 추가 정보 제공
-    #         for q in self.questions:
-    #             qid = q['id']
-    #             q_choices = [cp for cp in choices_position_data if cp['question_id'] == qid]
-    #             if q_choices:
-    #                 for answer in answer_key["answers"]:
-    #                     if answer["question_id"] == qid:
-    #                         answer["choice_positions"] = q_choices
-    #                         break
-            
-    #         with open(file_path, 'w', encoding='utf-8') as f:
-    #             json.dump(answer_key, f, ensure_ascii=False, indent=2)
-            
-    #         if os.path.exists(temp_pdf):
-    #             os.remove(temp_pdf)
-            
-    #         QMessageBox.information(
-    #             self, 
-    #             "Success", 
-    #             f"Answer key with positions has been saved.\n{file_path}\n\n"
-    #             f"Total: {len(self.questions)} questions, {answer_key['total_points']} points\n"
-    #             f"Choice positions: {len(choices_position_data)}"
-    #         )
-            
-    #     except Exception as e:
-    #         QMessageBox.critical(self, "Error", f"Failed to export answer key: {str(e)}")
-    #         import traceback
-    #         traceback.print_exc()
 
     def _get_num_choices(self, q):
         """선택지 개수 반환"""
@@ -1390,19 +1271,16 @@ class GeneratorApp(QMainWindow):
             choices = q.get('choices', [])
             if answer and choices:
                 for i, choice in enumerate(choices):
-                    if answer.lower() in choice.lower():
-                        return chr(65+i)  # 'A', 'B', 'C'...
-                    if answer.upper() == chr(65+i):
-                        return answer.upper()
+                    if answer == choice:
+                        return i+1
             return answer.upper() if answer else "?"
         
         elif qtype == 1:  # True/False - 'a'(True) 또는 'b'(False)로 변환
             answer = q.get('answer', '')
-            # 정답이 'True' 또는 'T'이면 'a', 'False' 또는 'F'이면 'b'
             if answer.lower() in ['true', 't', 'o', '○', '1']:
-                return 'a'   # a = True
+                return 1
             else:
-                return 'b'   # b = False
+                return 2
         
         elif qtype == 2:  # Fill in the Blank
             blanks = q.get('blanks', [])

@@ -7,9 +7,7 @@ from .essay import EssayGrader
 from .fill_blank import FillBlankGrader
 from .matching import MatchingGrader
 from ..omr import (
-    detect_marked_choice_bubble,
     omr_read_mc_tf_selection,
-    omr_roi_mark_score,
     pdf_region_to_bgr,
 )
 from .multiple_choice import MultipleChoiceGrader

@@ -19,7 +19,7 @@ except ImportError:
     TESSERACT_AVAILABLE = False
     EASYOCR_AVAILABLE = False
 
-from .omr import omr_read_mc_tf_selection_debug, pdf_region_to_bgr
+from .omr import omr_read_mc_tf_selection, pdf_region_to_bgr
 
 
 class DynamicQuestionDetector:
@@ -548,7 +548,7 @@ class AnswerExtractor:
         omr_dbg: Dict[str, Any] = {}
         try:
             bgr = self._region_to_bgr(page, region)
-            omr_ans, conf, omr_dbg = omr_read_mc_tf_selection_debug(bgr, qtype)
+            omr_ans, conf, omr_dbg = omr_read_mc_tf_selection(bgr, qtype)
         except Exception:
             omr_ans, conf = "", 0.0
 

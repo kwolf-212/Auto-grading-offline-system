@@ -175,7 +175,7 @@ class AnswerSheetEngine:
             file_path: 저장할 파일 경로
             position_callback: 문제 위치 정보를 저장할 콜백 함수 (question_id, x, y, page)
             choice_region_callback: 선택지 영역 정보를 저장할 콜백 함수 
-                (question_id, choice_letter, x, y, w, h, page, choice_type)
+                (question_id, expected_answer_number, x, y, w, h, page) - expected_answer_number는 1부터 시작하는 숫자
         """
         if not self.questions:
             return
@@ -430,44 +430,6 @@ class AnswerSheetEngine:
             nh       # 정규화 높이
         )
 
-
-    # =========================================================
-    # token layout tracker
-    # =========================================================
-
-    # def _track_text_token(
-    #     self,
-    #     c,
-    #     token_text,
-    #     current_x,
-    #     baseline_y,
-    #     font_name,
-    #     font_size
-    # ):
-    #     """
-    #     현재 token bbox 계산 후
-    #     다음 x 위치 반환
-    #     """
-
-    #     bbox = self._measure_text_bbox(
-    #         c,
-    #         token_text,
-    #         current_x,
-    #         baseline_y,
-    #         font_name,
-    #         font_size
-    #     )
-
-    #     token_w = c.stringWidth(
-    #         token_text,
-    #         font_name,
-    #         font_size
-    #     )
-
-    #     next_x = current_x + token_w
-
-    #     return bbox, next_x
-
     def _draw_answer_sheet_question_with_choice_regions(
         self, c, q, x, y, col_width, line_height, small_line_height, 
         width, margin, base_font_size, current_page, choice_region_callback
@@ -518,6 +480,7 @@ class AnswerSheetEngine:
             current_x = start_x
             for i in range(len(choices)):
                 letter = chr(97 + i)
+                expected_number = i + 1  # a→1, b→2, c→3, d→4
                 
                 # 버블 그리기 (텍스트 중앙에 맞춤)
                 draw_bubble(current_x, text_center_y, bubble_size, 1.5)
@@ -525,13 +488,13 @@ class AnswerSheetEngine:
                 # 선택지 문자 출력 (버블 오른쪽, 텍스트 기준선 y 사용)
                 c.drawString(current_x + bubble_size + text_spacing, y, letter.upper())
                 
-                # 영역 정보 저장
+                # 영역 정보 저장 (숫자 인덱스로 저장)
                 if choice_region_callback:
                     bubble_y = text_center_y - bubble_size/2
                     nx, ny, nw, nh = self._get_aruco_normalized_coordinates(
                         c, current_x, bubble_y, bubble_size, bubble_size
                     )
-                    choice_region_callback(q['id'], letter, nx, ny, nw, nh)
+                    choice_region_callback(q['id'], expected_number, nx, ny, nw, nh)
                 
                 current_x += bubble_spacing
             
@@ -550,7 +513,8 @@ class AnswerSheetEngine:
             
             letters = ['T', 'F']
             current_x = start_x
-            for letter in letters:
+            for idx, letter in enumerate(letters):
+                expected_number = idx + 1  # T→1, F→2
                 draw_bubble(current_x, text_center_y, bubble_size, 1.5)
                 c.drawString(current_x + bubble_size + text_spacing, y, letter)
                 
@@ -559,7 +523,7 @@ class AnswerSheetEngine:
                     nx, ny, nw, nh = self._get_aruco_normalized_coordinates(
                         c, current_x, bubble_y, bubble_size, bubble_size
                     )
-                    choice_region_callback(q['id'], letter.lower(), nx, ny, nw, nh)
+                    choice_region_callback(q['id'], expected_number, nx, ny, nw, nh)
                 
                 current_x += bubble_spacing
             
