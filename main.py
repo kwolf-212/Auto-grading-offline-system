@@ -13,12 +13,8 @@ def main():
         window = GraderApp()
     else:
         # 시험지 생성기 실행
-        try:
-            from ui.generator_main import GeneratorApp
-            window = GeneratorApp()
-        except ImportError:
-            from exam_generator_app import GeneratorApp
-            window = GeneratorApp()
+        from ui.generator_main import GeneratorApp
+        window = GeneratorApp()
     
     window.show()
     sys.exit(app.exec_())

@@ -41,7 +41,8 @@ class ImagePreprocessor:
         self.debug_mode = debug_mode  # 디버그 모드 저장
         self.preprocessed_pages: Dict[int, PagePreprocessResult] = {}
         self.question_regions: Dict[int, Dict[int, QuestionRegion]] = {}  # {page_num: {qid: QuestionRegion}}
-        
+        self.is_processed = False
+
     def preprocess_pdf(self, pdf_path: str, exam_data: Dict) -> bool:
         """
         PDF 전체 페이지 전처리
@@ -112,12 +113,14 @@ class ImagePreprocessor:
                           f"markers: {list(detected_markers.keys())}")
             
             doc.close()
+            self.is_processed = True
             return True
             
         except Exception as e:
             print(f"❌ Preprocessing failed: {str(e)}")
             import traceback
             traceback.print_exc()
+            self.is_processed = False
             return False
     
     def _convert_question_regions(self, exam_data: Dict, page_num: int, detector: ArUcoDetector):

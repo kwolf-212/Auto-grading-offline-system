@@ -11,6 +11,7 @@ from exam_grader import ExamGrader, ResultExporter
 from ui.grader_styles import GRADER_STYLE
 from ui.student_manager import StudentManagerDialog, StudentInfoWidget
 from ui.widgets.pdf_preview_widget import PDFPreviewWidget
+from exam_grader.image_preprocessor import ImagePreprocessor
 
 try:
     import fitz
@@ -41,6 +42,9 @@ class GraderApp(QMainWindow):
         self.student_pdf_mapping = {}
         self.result_exporter = ResultExporter()
         
+        self.preprocessor = None  # 전처리 결과 저장
+        self.debug_mode = False    # 디버그 모드 활성화
+
         self.init_ui()
         self.apply_style()
         self.showMaximized()
@@ -253,6 +257,11 @@ class GraderApp(QMainWindow):
         self.exam_info_label.setStyleSheet("color: #888; padding: 0 10px; font-size: 11px;")
         toolbar.addWidget(self.exam_info_label)
         
+        # toolbar에 추가
+        self.preprocess_status = QLabel("🔧 -")
+        self.preprocess_status.setStyleSheet("color: #888; padding: 0 10px; font-size: 11px;")
+        toolbar.addWidget(self.preprocess_status)
+
         # 학생 정보 표시
         self.student_info_label = QLabel("👤 -")
         self.student_info_label.setStyleSheet("color: #888; padding: 0 10px; font-size: 11px;")
@@ -383,6 +392,10 @@ class GraderApp(QMainWindow):
         
         if self.pdf_files:
             self.current_pdf_path = self.pdf_files[0]
+            # 🔑 PDF 로드 시 전처리 수행
+            if self.exam_data:
+                self._preprocess_current_pdf()
+
             self.pdf_preview.load_pdf(self.current_pdf_path, 0)
             
             # 파일 카운터 업데이트
@@ -402,11 +415,44 @@ class GraderApp(QMainWindow):
             
             self.statusBar().showMessage(f"Loaded {len(paths)} PDFs")
     
+    def _preprocess_current_pdf(self):
+        """현재 PDF에 대해 ArUco 기반 전처리 수행"""
+        if not self.exam_data or not self.current_pdf_path:
+            return
+        
+        try:
+            self.statusBar().showMessage("🔄 Preprocessing PDF with ArUco...")
+            self.preprocessor = ImagePreprocessor(zoom=1.5, debug_mode=self.debug_mode)
+            success = self.preprocessor.preprocess_pdf(self.current_pdf_path, self.exam_data)
+            
+            if success:
+                summary = self.preprocessor.get_preprocess_summary()
+                self.statusBar().showMessage(
+                    f"✅ Preprocessed: {summary['calibrated_pages']}/{summary['total_pages']} pages, "
+                    f"{summary['total_choice_regions']} regions"
+                )
+
+                self.preprocess_status.setText("✅ Preprocessed")
+                self.preprocess_status.setStyleSheet("color: #4caf50; padding: 0 10px; font-size: 11px;")
+            else:
+                self.statusBar().showMessage("⚠️ Preprocessing failed")
+                self.preprocessor = None
+
+                self.preprocess_status.setText("⚠️ Not preprocessed")
+                self.preprocess_status.setStyleSheet("color: #ff9800; padding: 0 10px; font-size: 11px;")
+        except Exception as e:
+            self.statusBar().showMessage(f"❌ Preprocessing error: {str(e)}")
+            self.preprocessor = None
+            
     # ===== PDF 탐색 =====
     def prev_pdf(self):
         if self.current_pdf_index > 0:
             self.current_pdf_index -= 1
             self.current_pdf_path = self.pdf_files[self.current_pdf_index]
+
+            # 전처리 갱신
+            self._preprocess_current_pdf() 
+
             self.pdf_preview.load_pdf(self.current_pdf_path, 0)
             self.file_counter_label.setText(f"{self.current_pdf_index + 1}/{len(self.pdf_files)}")
             
@@ -423,6 +469,10 @@ class GraderApp(QMainWindow):
         if self.current_pdf_index < len(self.pdf_files) - 1:
             self.current_pdf_index += 1
             self.current_pdf_path = self.pdf_files[self.current_pdf_index]
+
+            # 전처리 갱신
+            self._preprocess_current_pdf()
+
             self.pdf_preview.load_pdf(self.current_pdf_path, 0)
             self.file_counter_label.setText(f"{self.current_pdf_index + 1}/{len(self.pdf_files)}")
             
@@ -494,11 +544,24 @@ class GraderApp(QMainWindow):
         QApplication.processEvents()
         
         try:
-            grader = ExamGrader(self.exam_data)
-            results = grader.grade_exam(self.current_pdf_path)
-            total = grader.get_total_score(results)
-            max_score = grader.get_max_score()
-            
+            # 🔑 전처리 결과를 사용한 채점
+            grader = ExamGrader(self.exam_data, debug_mode=self.debug_mode)
+
+            if self.preprocessor and self.preprocessor.is_processed:
+                # 전처리 결과 사용
+                grader.set_preprocessor(self.preprocessor)
+                result = grader.grade_from_preprocessed()
+                
+                # 결과 변환 (기존 형식과 호환)
+                results = result.get('scores', {})
+                total = result.get('total', 0)
+                max_score = result.get('max_score', 0)
+            else:
+                # 기존 방식 (fallback)
+                results = grader.grade_exam(self.current_pdf_path)
+                total = grader.get_total_score(results)
+                max_score = grader.get_max_score()
+                    
             self.grading_results[self.current_pdf_path] = {
                 'results': results, 
                 'total': total, 
@@ -539,7 +602,7 @@ class GraderApp(QMainWindow):
         QApplication.processEvents()
         
         try:
-            grader = ExamGrader(self.exam_data)
+            grader = ExamGrader(self.exam_data, debug_mode=self.debug_mode)
             max_score = grader.get_max_score()
             success_count = 0
             
@@ -548,8 +611,21 @@ class GraderApp(QMainWindow):
                 QApplication.processEvents()
                 
                 try:
-                    results = grader.grade_exam(path)
-                    total = grader.get_total_score(results)
+                    # 각 PDF에 대해 전처리 수행
+                    preprocessor = ImagePreprocessor(zoom=1.5, debug_mode=self.debug_mode)
+                    preprocessor.preprocess_pdf(path, self.exam_data)
+
+                    if preprocessor.is_processed:
+                        grader.set_preprocessor(preprocessor)
+                        result = grader.grade_from_preprocessed()
+                        results = result.get('scores', {})
+                        total = result.get('total', 0)
+                        max_score = result.get('max_score', 0)
+                    else:
+                        results = grader.grade_exam(path)
+                        total = grader.get_total_score(results)
+                        max_score = grader.get_max_score()
+                
                     self.grading_results[path] = {
                         'results': results, 
                         'total': total, 
