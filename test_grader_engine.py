@@ -3,17 +3,15 @@
 import sys
 import os
 import json
-import re
 import cv2
 import numpy as np
 from datetime import datetime
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QFont, QColor, QPixmap, QImage, QPainter, QPen, QBrush
-from PyQt5.QtCore import Qt, QSize, QRect, QThread, pyqtSignal, QTimer
+from PyQt5.QtGui import QFont, QColor, QPixmap, QImage, QPainter, QPen
+from PyQt5.QtCore import Qt, QTimer
 
 from exam_grader.grader_engine import ExamGrader
-from exam_grader.omr import ArUcoDetector  # convert_normalized_coordinates_from_json 제거
-from exam_grader.image_preprocessor import ImagePreprocessor, preprocess_for_display
+from exam_grader.image_preprocessor import ImagePreprocessor
 
 
 def _format_grading_debug_block(
@@ -91,72 +89,6 @@ try:
     TESSERACT_AVAILABLE = True
 except ImportError:
     TESSERACT_AVAILABLE = False
-
-
-class GradingWorker(QThread):
-    progress = pyqtSignal(int, str)
-    question_progress = pyqtSignal(int, int, str, str, str, float, str, str, object)
-    finished = pyqtSignal(dict)
-    error = pyqtSignal(str)
-    
-    def __init__(self, exam_data, pdf_path, use_ocr=True, debug_mode=True):
-        super().__init__()
-        self.exam_data = exam_data
-        self.pdf_path = pdf_path
-        self.use_ocr = use_ocr
-        self.debug_mode = debug_mode
-    
-    def run(self):
-        try:
-            self.progress.emit(10, "Loading PDF and preparing ArUco...")
-            
-            from exam_grader.grader_engine import ExamGrader
-            # use_detection 파라미터 제거
-            grader = ExamGrader(self.exam_data, debug_mode=self.debug_mode)
-            
-            result = grader.grade_from_pdf(self.pdf_path)
-            
-            total_questions = len(result['max_scores'])
-            
-            self.progress.emit(30, f"Grading {total_questions} questions...")
-            
-            for idx, qid in enumerate(sorted(result['max_scores'].keys())):
-                student = result['student_answers'].get(qid, '')
-                correct = result['correct_answers'].get(qid, '')
-                score = result['scores'].get(qid, 0)
-                max_score = result['max_scores'].get(qid, 0)
-                qtype = result['question_types'].get(qid, "")
-                
-                if student and correct:
-                    is_correct = (str(student).upper() == str(correct).upper())
-                    result_text = "✓ 정답" if is_correct else "✗ 오답"
-                elif student:
-                    result_text = "⚠️ 답변 있음"
-                else:
-                    result_text = "❌ 미응답"
-                
-                gd = result.get("grading_debug", {}).get(qid, {})
-                
-                self.question_progress.emit(
-                    qid, total_questions,
-                    str(student) if student else "(없음)",
-                    str(correct) if correct else "(없음)",
-                    result_text, score, "", qtype,
-                    gd,
-                )
-                
-                progress_pct = 30 + int((idx + 1) / total_questions * 65)
-                self.progress.emit(progress_pct, f"Grading Q{qid}...")
-                self.msleep(20)
-            
-            self.progress.emit(100, "Complete!")
-            self.finished.emit(result)
-            
-        except Exception as e:
-            self.error.emit(str(e))
-            import traceback
-            traceback.print_exc()
-    
 
 class PDFImageViewer(QLabel):
     """PDF 페이지 이미지 뷰어 - ArUco 기준 선택지 영역 표시"""
@@ -996,7 +928,6 @@ class GraderTester(QMainWindow):
             
         else:
             print("⚠️ No preprocessor data, using fallback method")
-            self._display_current_page_fallback()
         
         print(f"{'='*60}\n")
     
@@ -1152,9 +1083,7 @@ class GraderTester(QMainWindow):
             self._add_log("🚀 Using preprocessed data for grading...")
             self._grade_with_preprocessor()
         else:
-            # Fallback: 전처리 없이 채점 (기존 방식)
             self._add_log("⚠️ No preprocessed data, using on-demand grading...")
-            self._start_grading_worker()
     
     def _grade_with_preprocessor(self):
         """전처리된 데이터로 채점"""
@@ -1169,47 +1098,6 @@ class GraderTester(QMainWindow):
         result = grader.grade_from_preprocessed()
         
         self.on_grading_finished(result)
-    
-    def _start_grading_worker(self):
-        """기존 방식 (GradingWorker 사용)"""
-        self.worker = GradingWorker(
-            self.exam_data, self.pdf_path, use_ocr=True, debug_mode=True
-        )
-        self.worker.progress.connect(self.update_progress)
-        self.worker.question_progress.connect(self.update_question_progress)
-        self.worker.finished.connect(self.on_grading_finished)
-        self.worker.error.connect(self.on_grading_error)
-        self.worker.start()
-        
-    def update_progress(self, value, message):
-        self.progress_bar.setValue(value)
-        self.grade_status.setText(message)
-        self._add_log(f"  {message}")
-    
-    def update_question_progress(self, qid, total, student, correct, result, score, region_text, qtype, grading_debug):
-        for i in range(self.question_list.count()):
-            item = self.question_list.item(i)
-            if item.text().startswith(f"Q{qid}"):
-                if "정답" in result:
-                    item.setForeground(QColor(129, 199, 132))
-                    item.setText(f"✓ {item.text()} → {score:.0f} pts")
-                elif "오답" in result:
-                    item.setForeground(QColor(239, 154, 154))
-                    item.setText(f"✗ {item.text()} → {score:.0f} pts")
-                elif "답변" in result:
-                    item.setForeground(QColor(255, 204, 128))
-                    item.setText(f"⚠️ {item.text()} → {score:.0f} pts")
-                else:
-                    item.setForeground(QColor(224, 224, 224))
-                    item.setText(f"❌ {item.text()} → {score:.0f} pts")
-                break
-
-        self._add_log(f"  Q{qid}: {result} (Student: '{student}', Correct: '{correct}', Score: {score})")
-        
-        self.question_detail.update_question_from_progress(
-            qid, qtype, student, correct, score, result, region_text, grading_debug
-        )
-        QApplication.processEvents()
     
     def on_grading_finished(self, result):
         self.grading_result = result
@@ -1249,11 +1137,11 @@ class GraderTester(QMainWindow):
             self._display_question_detail(self.all_questions_list[0])
     
     def on_grading_error(self, error_msg):
-        self.progress_bar.setVisible(False)
         self.grade_btn.setEnabled(True)
-        self.grade_status.setText("❌ Grading failed")
+        self.progress_bar.setVisible(False)
         self._add_log(f"❌ Error: {error_msg}")
         QMessageBox.critical(self, "Error", f"Grading failed:\n{error_msg}")
+
     
     def clear_results(self):
         self.grading_result = None

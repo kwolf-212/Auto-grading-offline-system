@@ -12,28 +12,10 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-try:
-    import easyocr
-    _EASYOCR_OK = True
-except ImportError:
-    _EASYOCR_OK = False
-
-_easy_reader: Optional["easyocr.Reader"] = None
-
 
 # ============================================================
-# 1. OCR 및 이미지 기본 처리
+# 1. 이미지 기본 처리
 # ============================================================
-
-def omr_get_easyocr_reader():
-    """프로세스당 한 번 초기화되는 EasyOCR Reader"""
-    global _easy_reader
-    if not _EASYOCR_OK:
-        return None
-    if _easy_reader is None:
-        _easy_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
-    return _easy_reader
-
 
 def omr_to_gray(img: np.ndarray) -> np.ndarray:
     """BGR을 그레이스케일로 변환"""
@@ -48,32 +30,6 @@ def omr_clahe(gray: np.ndarray, clip_limit: float = 2.0, tile: int = 8) -> np.nd
     """CLAHE 대비 향상"""
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile, tile))
     return clahe.apply(gray)
-
-def pdf_region_to_bgr(page, region, zoom: float = 3.4) -> np.ndarray:
-    """
-    PDF 페이지의 한 직사각형을 고해상도 BGR 이미지로 렌더링
-    
-    Args:
-        page: fitz.Page 객체
-        region: fitz.Rect 영역
-        zoom: 확대 비율 (기본 3.4)
-    
-    Returns:
-        BGR 이미지 (OpenCV 형식)
-    """
-    import fitz as _fitz
-    
-    if not isinstance(page, _fitz.Page):
-        raise TypeError("page must be a fitz.Page")
-    
-    mat = _fitz.Matrix(zoom, zoom)
-    pix = page.get_pixmap(matrix=mat, clip=region, alpha=False)
-    
-    arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
-    
-    if pix.n == 4:
-        return cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
-    return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
 # ============================================================
 # 2. 버블 마킹 점수 계산
@@ -224,123 +180,6 @@ def omr_select_answers(
                 )
 
     return selected, best.score
-
-
-# ============================================================
-# 3. EasyOCR 기반 문자 인식 (괄호 형태)
-# ============================================================
-
-def _parse_letter_from_ocr_text(text: str) -> Optional[str]:
-    """OCR 텍스트에서 영문자 파싱"""
-    t = text.strip().lower().replace(" ", "")
-    t = t.replace("(", "[").replace(")", "]")
-    m = re.search(r"\[?\s*([a-j])\s*\]?", t)
-    if m:
-        return m.group(1)
-    if len(t) == 1 and "a" <= t <= "j":
-        return t
-    return None
-
-
-def _expand_roi(x1, y1, x2, y2, w, h, pad_x=0.2, pad_y=0.35):
-    """ROI 영역 확장"""
-    pw = int((x2 - x1) * pad_x)
-    ph = int((y2 - y1) * pad_y)
-    return (
-        max(0, x1 - pw), max(0, y1 - ph),
-        min(w, x2 + pw), min(h, y2 + ph)
-    )
-
-
-def omr_read_mc_tf_selection(
-    bgr: np.ndarray,
-    question_type: str,
-    easyocr_reader=None,
-) -> Tuple[str, float]:
-    """
-    객관식/참거짓 답안지에서 마킹된 항목 감지
-    
-    Args:
-        bgr: 문제 영역 이미지 (BGR)
-        question_type: "Multiple Choice" 또는 "True/False"
-        easyocr_reader: EasyOCR Reader (None이면 내부 생성)
-        
-    Returns:
-        (선택된 글자, 신뢰도)
-    """
-    if bgr is None or bgr.size == 0:
-        return "", 0.0
-    
-    gray = omr_to_gray(bgr)
-    gray = omr_clahe(gray)
-    
-    is_tf = question_type in ("True/False", "true_false")
-    num_slots = 2 if is_tf else 4
-    
-    # EasyOCR로 글자 영역 감지
-    reader = easyocr_reader or omr_get_easyocr_reader()
-    scores = {}
-    
-    if reader is not None:
-        try:
-            results = reader.readtext(bgr, detail=1, paragraph=False)
-            h, w = gray.shape
-            for box, text, conf in results:
-                letter = _parse_letter_from_ocr_text(text)
-                if letter and conf >= 0.15:
-                    xs = [int(p[0]) for p in box]
-                    ys = [int(p[1]) for p in box]
-                    x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
-                    ex1, ey1, ex2, ey2 = _expand_roi(x1, y1, x2, y2, w, h)
-                    roi = gray[ey1:ey2, ex1:ex2]
-                    scores[letter] = omr_compute_bubble_score(roi)
-        except Exception:
-            pass
-    
-    # 균등 분할 폴백
-    if len(scores) < 2:
-        eq_scores = _omr_equal_column_scores(gray, num_slots)
-        scores = eq_scores if eq_scores else scores
-    
-    if not scores:
-        return "", 0.0
-    
-    # 최적 선택
-    best_letter = max(scores, key=scores.get)
-    best_score = scores[best_letter]
-    
-    if best_score < 0.15:
-        return "", 0.0
-    
-    return best_letter, best_score
-
-
-def _omr_equal_column_scores(gray: np.ndarray, num_slots: int) -> Dict[str, float]:
-    """균등 분할 방식으로 각 슬롯 점수 계산 (폴백용)"""
-    h, w = gray.shape
-    if h < 8 or w < 40 or num_slots < 2:
-        return {}
-    
-    x0 = min(int(0.12 * w), w - 20)
-    strip = gray[int(0.22 * h):, x0:]
-    sh, sw = strip.shape
-    
-    if sh < 4 or sw < num_slots * 8:
-        return {}
-    
-    g = omr_clahe(strip)
-    scores = {}
-    slot_w = sw // num_slots
-    letters = [chr(ord("a") + i) for i in range(num_slots)]
-    
-    for i, L in enumerate(letters):
-        x1 = i * slot_w + slot_w // 10
-        x2 = (i + 1) * slot_w - slot_w // 10
-        roi = g[:, x1:x2]
-        scores[L] = omr_compute_bubble_score(roi)
-    
-    return scores
-
 
 # ============================================================
 # 4. ArUco 마커 감지 및 좌표 변환

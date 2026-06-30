@@ -1302,7 +1302,19 @@ class GeneratorApp(QMainWindow):
             return q.get('answer', '')
         
         elif qtype == 6:  # Ordering
-            return " > ".join([str(i+1) for i in range(len(q.get('ordering_items', [])))])
+            answer_key = q.get('answer', '').strip()
+            if answer_key:
+                # "1,3,2" → "1 > 3 > 2" 변환
+                # 쉼표, 공백, 세미콜론 등 다양한 구분자 처리
+                import re
+                # 숫자만 추출하여 리스트로 변환
+                numbers = re.findall(r'\d+', answer_key)
+                if numbers:
+                    return " > ".join(numbers)
+            
+            # Answer_Key가 없으면 기본값 (1,2,3,...)
+            num_items = len(q.get('ordering_items', []))
+            return " > ".join([str(i+1) for i in range(num_items)]) if num_items > 0 else ""        
         
         elif qtype == 7:  # Code
             return q.get('answer', '')

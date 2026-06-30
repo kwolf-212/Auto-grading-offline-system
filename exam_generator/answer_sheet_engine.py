@@ -596,11 +596,12 @@ class AnswerSheetEngine:
                 bubble_x = current_match_x + text_width + text_spacing
                 draw_bubble(bubble_x, text_center_y, bubble_size, 1.5)
                 
-                # 영역 정보 저장
+                # 영역 정보 저장 (조금 확대하여 저장)
+                offset = -1
                 if choice_region_callback:
                     bubble_y = text_center_y - bubble_size/2
                     nx, ny, nw, nh = self._get_aruco_normalized_coordinates(
-                        c, bubble_x, bubble_y, bubble_size, bubble_size
+                        c, bubble_x+offset, bubble_y-offset, bubble_size-2*offset, bubble_size-2*offset
                     )
                     choice_region_callback(q['id'], str(i+1), nx, ny, nw, nh)
                 
@@ -640,10 +641,11 @@ class AnswerSheetEngine:
                 draw_bubble(current_x, text_center_y, bubble_size, 1.5)
                 
                 # 영역 정보 저장
+                offset = -1
                 if choice_region_callback:
                     bubble_y = text_center_y - bubble_size/2
                     nx, ny, nw, nh = self._get_aruco_normalized_coordinates(
-                        c, current_x, bubble_y, bubble_size, bubble_size
+                        c, current_x+offset, bubble_y-offset, bubble_size-2*offset, bubble_size-2*offset
                     )
                     choice_region_callback(q['id'], str(i+1), nx, ny, nw, nh)
                 

@@ -1,34 +1,32 @@
 # exam_grader/graders/__init__.py
-from .base import QuestionGrader
-from .calculation import CalculationGrader
-from .code_writing import CodeGrader
-from .default import DefaultGrader
-from .essay import EssayGrader
-from .fill_blank import FillBlankGrader
-from .matching import MatchingGrader
-from ..omr import (
-    omr_read_mc_tf_selection,
-    pdf_region_to_bgr,
-)
-from .multiple_choice import MultipleChoiceGrader
-from .ordering import OrderingGrader
-from .short_answer import ShortAnswerGrader
-from .true_false import TrueFalseGrader
+from typing import Dict, Type
 
-__all__ = [
-    "QuestionGrader",
-    "MultipleChoiceGrader",
-    "TrueFalseGrader",
-    "FillBlankGrader",
-    "ShortAnswerGrader",
-    "MatchingGrader",
-    "OrderingGrader",
-    "CalculationGrader",
-    "CodeGrader",
-    "EssayGrader",
-    "DefaultGrader",
-    "detect_marked_choice_bubble",
-    "omr_read_mc_tf_selection",
-    "omr_roi_mark_score",
-    "pdf_region_to_bgr",
-]
+from .base import BaseGrader
+from .multiple_choice import MultipleChoiceGrader
+from .true_false import TrueFalseGrader
+from .ordering import OrderingGrader  
+
+# 유형별 채점기 매핑
+GRADER_REGISTRY: Dict[str, Type[BaseGrader]] = {
+    'multiple_choice': MultipleChoiceGrader,
+    'mc': MultipleChoiceGrader,
+    'true_false': TrueFalseGrader,
+    'True/False': TrueFalseGrader,
+    'tf': TrueFalseGrader,
+    'ordering': OrderingGrader,
+    'ordering/ranking': OrderingGrader,
+}
+
+
+def get_grader(question_type: str, qinfo: Dict) -> BaseGrader:
+    """문제 유형에 맞는 채점기 반환"""
+    grader_class = GRADER_REGISTRY.get(question_type.lower())
+    
+    if grader_class is None:
+        # 기본값: Multiple Choice
+        grader_class = MultipleChoiceGrader
+    
+    return grader_class(qinfo)
+
+
+__all__ = ['BaseGrader', 'MultipleChoiceGrader', 'TrueFalseGrader', 'OrderingGrader', 'get_grader']
