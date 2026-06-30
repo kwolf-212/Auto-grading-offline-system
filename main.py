@@ -1,6 +1,6 @@
 # main.py
 import sys
-from PyQt5.QtWidgets import QApplication, QMessageBox
+from PyQt5.QtWidgets import QApplication
 
 
 def main():

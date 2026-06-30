@@ -1,0 +1,23 @@
+# Core dependencies
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+PyQt5==5.15.9
+PyPDF2==3.0.1
+reportlab==4.0.9
+Pillow==10.1.0
+numpy==1.24.3
+
+# Database and utilities
+sqlite3  # Built-in with Python, no installation needed
+
+# Additional useful packages
+qrcode==7.4.2
+pypdf==3.17.1
+pdf2image==1.16.3
+pytesseract==0.3.10  # Optional, for OCR functionality
+
+# Development and testing
+pytest==7.4.3
+
+# GUI enhancements (optional)
+pyqt5-tools==5.15.9.3.3
